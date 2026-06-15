@@ -553,7 +553,7 @@ async def read_log_file(
     try:
         if filename.endswith(".gz"):
             # gz 文件无法高效 seek，仍读取全部内容后取尾部
-            with gzip.open(real_path, "rt", encoding="utf-8") as f:
+            with gzip.open(real_path, "rt", encoding="utf-8", errors="replace") as f:
                 lines = f.readlines()
             total_lines = len(lines)
             start = max(0, total_lines - tail)
@@ -564,7 +564,7 @@ async def read_log_file(
             file_size = os.path.getsize(real_path)
             # 估算需要读取的字节数（平均每行约 200 字节）
             read_bytes = min(file_size, tail * 200 + 1024)
-            with open(real_path, "r", encoding="utf-8") as f:
+            with open(real_path, "r", encoding="utf-8", errors="replace") as f:
                 if read_bytes < file_size:
                     f.seek(file_size - read_bytes)
                     f.readline()  # 跳过不完整的行
@@ -616,11 +616,11 @@ async def stream_log_file(
                 current_size = os.path.getsize(real_path)
                 if current_size > last_size:
                     if filename.endswith(".gz"):
-                        with gzip.open(real_path, "rt", encoding="utf-8") as f:
+                        with gzip.open(real_path, "rt", encoding="utf-8", errors="replace") as f:
                             f.seek(last_size)
                             new_content = f.read()
                     else:
-                        with open(real_path, "r", encoding="utf-8") as f:
+                        with open(real_path, "r", encoding="utf-8", errors="replace") as f:
                             f.seek(last_size)
                             new_content = f.read()
 
