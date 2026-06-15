@@ -48,6 +48,9 @@ class Task(Base):
     # 取消请求标记
     cancel_requested: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
+    # 游客 IP（已登录用户为 None）
+    client_ip: Mapped[str | None] = mapped_column(String(45), nullable=True)
+
     # 时间戳
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

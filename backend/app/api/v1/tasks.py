@@ -6,7 +6,7 @@ import uuid
 from uuid import UUID
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status, Query
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status, Query, Request
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -69,6 +69,7 @@ async def create_task(
     file: UploadFile = File(None),
     db: AsyncSession = Depends(get_db),
     current_user: User | None = Depends(get_current_user),
+    request: Request = None,
 ):
     """创建任务：支持上传文件或提交 URL"""
     try:
@@ -93,6 +94,26 @@ async def create_task(
         source_filename = file.filename
         title = title or file.filename
 
+    # --- 游客任务次数限制校验 ---
+    if current_user is None:
+        forwarded = request.headers.get("X-Forwarded-For")
+        if forwarded:
+            client_ip = forwarded.split(",")[0].strip()
+        else:
+            client_ip = request.client.host
+
+        guest_limit = await get_config_value(db, "guest_task_limit", 3)
+        today_count = await task_service.count_guest_tasks_today(db, client_ip)
+
+        if today_count >= guest_limit:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="今日任务已达上限，请登录后继续使用",
+            )
+    else:
+        client_ip = None
+    # --- 校验结束 ---
+
     task = await task_service.create_task(
         db=db,
         title=title or "未命名任务",
@@ -104,6 +125,7 @@ async def create_task(
         source_filename=source_filename,
         file_path=file_path,
         user_id=current_user.id if current_user else None,
+        client_ip=client_ip,
     )
 
     # 如果上传文件，需要更新 file_path 到正确的 task_id 目录

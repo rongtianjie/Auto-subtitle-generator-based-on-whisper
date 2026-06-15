@@ -25,6 +25,7 @@ class TaskService:
         source_filename: str | None = None,
         file_path: str | None = None,
         user_id: UUID | None = None,
+        client_ip: str | None = None,
     ) -> Task:
         """创建任务"""
         task = Task(
@@ -37,12 +38,25 @@ class TaskService:
             whisper_model=whisper_model,
             output_formats=output_formats,
             translate_target_langs=translate_target_langs,
+            client_ip=client_ip,
             status="pending",
         )
         db.add(task)
         await db.flush()
         await task_queue.enqueue(task.id, db)
         return task
+
+    @staticmethod
+    async def count_guest_tasks_today(db: AsyncSession, client_ip: str) -> int:
+        """查询某个游客 IP 今日已创建的任务数"""
+        from sqlalchemy import func
+        result = await db.execute(
+            select(func.count(Task.id)).where(
+                Task.client_ip == client_ip,
+                func.date(Task.created_at) == func.current_date(),
+            )
+        )
+        return result.scalar() or 0
 
     @staticmethod
     async def get_task(db: AsyncSession, task_id: UUID) -> Task | None:
