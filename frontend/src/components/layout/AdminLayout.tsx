@@ -12,12 +12,12 @@ import { cn } from '@/lib/utils';
 
 const navItems = [
   { to: '/admin', label: '概览', icon: BarChart3, end: true },
+  { to: '/admin/files', label: '文件管理', icon: FolderOpen },
   { to: '/admin/users', label: '用户管理', icon: Users },
-  { to: '/admin/config', label: '系统配置', icon: Settings },
   { to: '/admin/models', label: '模型管理', icon: Cpu },
   { to: '/admin/llm', label: 'LLM 配置', icon: MessageSquare },
+  { to: '/admin/config', label: '系统配置', icon: Settings },
   { to: '/admin/logs', label: '系统日志', icon: FileText },
-  { to: '/admin/files', label: '文件管理', icon: FolderOpen },
 ];
 
 export function AdminLayout() {
