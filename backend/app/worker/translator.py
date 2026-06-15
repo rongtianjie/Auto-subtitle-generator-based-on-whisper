@@ -9,12 +9,13 @@ class Translator:
 
     async def translate_srt(self, srt_path: str, target_langs: list[str],
                             base_url: str, api_key: str, model: str,
-                            concurrency: int = 3, source_lang: str = "en") -> dict[str, str]:
+                            concurrency: int = 3, source_lang: str = "en",
+                            timeout: int = 60) -> dict[str, str]:
         """翻译 SRT 文件到多个目标语言，返回 {lang: output_path}"""
         from app.util import read_srt_file, write_srt_file, translate_subtitles_async
         import os
 
-        client = AsyncOpenAI(base_url=base_url, api_key=api_key)
+        client = AsyncOpenAI(base_url=base_url, api_key=api_key, timeout=timeout)
         subtitles = read_srt_file(srt_path)
 
         results = {}

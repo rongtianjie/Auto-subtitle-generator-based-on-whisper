@@ -23,6 +23,7 @@ from app.services.task_service import task_service
 from app.services.config_service import get_config_value
 from app.core.task_queue import task_queue
 from app.core.storage import storage
+from app.config import settings
 
 router = APIRouter(prefix="/tasks", tags=["任务"])
 
@@ -88,6 +89,29 @@ async def create_task(
     if source_type == "upload":
         if not file:
             raise HTTPException(status_code=400, detail="上传模式需要提供文件")
+
+        # 校验文件大小
+        max_file_size_mb = await get_config_value(db, "max_file_size_mb", settings.MAX_FILE_SIZE_MB)
+        max_size_bytes = max_file_size_mb * 1024 * 1024
+
+        # 检查 Content-Length 头（快速拒绝）
+        content_length = request.headers.get("content-length")
+        if content_length and int(content_length) > max_size_bytes:
+            raise HTTPException(
+                status_code=400,
+                detail=f"文件大小超过限制（{max_file_size_mb}MB）",
+            )
+
+        # 检查实际文件大小（seek 到末尾获取大小）
+        file.file.seek(0, 2)
+        actual_size = file.file.tell()
+        file.file.seek(0)
+        if actual_size > max_size_bytes:
+            raise HTTPException(
+                status_code=400,
+                detail=f"文件大小超过限制（{max_file_size_mb}MB）",
+            )
+
         # 流式写入，避免将整个文件加载到内存
         temp_id = uuid.uuid4()
         file_path = storage.save_upload_stream(temp_id, file.filename, file.file)

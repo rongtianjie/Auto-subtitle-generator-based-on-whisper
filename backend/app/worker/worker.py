@@ -16,7 +16,8 @@ from app.core.storage import storage
 from app.models.task import Task
 from app.models.task_output import TaskOutput
 from app.database import async_session_factory
-from sqlalchemy import select, update
+from app.services.config_service import get_config_value
+from sqlalchemy import select, update, func
 
 
 class Worker:
@@ -30,20 +31,54 @@ class Worker:
         self._running = True
         logger.info("Worker 已启动，等待任务...")
 
+        # 启动定期清理任务
+        cleanup_task = asyncio.create_task(self._periodic_cleanup())
+
+        try:
+            while self._running:
+                try:
+                    async with async_session_factory() as db:
+                        # 检查最大并发数
+                        max_concurrent = await get_config_value(db, "max_concurrent_tasks", 1)
+                        processing_count = await db.scalar(
+                            select(func.count(Task.id)).where(Task.status == "processing")
+                        )
+                        if processing_count and processing_count >= max_concurrent:
+                            await db.commit()
+                            await asyncio.sleep(settings.WORKER_POLL_INTERVAL)
+                            continue
+
+                        task = await task_queue.dequeue(db)
+                        if task:
+                            await db.commit()
+                            await self._process_task(task)
+                        else:
+                            await db.commit()
+
+                    await asyncio.sleep(settings.WORKER_POLL_INTERVAL)
+                except Exception as e:
+                    logger.error(f"Worker 循环异常: {e}")
+                    await asyncio.sleep(5)
+        finally:
+            cleanup_task.cancel()
+            try:
+                await cleanup_task
+            except asyncio.CancelledError:
+                pass
+
+    async def _periodic_cleanup(self):
+        """定期清理过期文件（每小时执行一次）"""
         while self._running:
             try:
+                await asyncio.sleep(3600)
                 async with async_session_factory() as db:
-                    task = await task_queue.dequeue(db)
-                    if task:
-                        await db.commit()
-                        await self._process_task(task)
-                    else:
-                        await db.commit()
-
-                await asyncio.sleep(settings.WORKER_POLL_INTERVAL)
+                    retention_days = await get_config_value(db, "retention_days", 30)
+                storage.cleanup_expired(days=retention_days)
+                logger.info(f"过期文件清理完成（保留 {retention_days} 天）")
+            except asyncio.CancelledError:
+                break
             except Exception as e:
-                logger.error(f"Worker 循环异常: {e}")
-                await asyncio.sleep(5)
+                logger.warning(f"过期文件清理异常: {e}")
 
     async def stop(self):
         self._running = False
@@ -231,6 +266,7 @@ class Worker:
             base_url = await get_config_value(db, "llm_base_url", settings.LLM_BASE_URL)
             api_key = await get_config_value(db, "llm_api_key", settings.LLM_API_KEY)
             model = await get_config_value(db, "llm_model", settings.LLM_MODEL)
+            llm_timeout = await get_config_value(db, "llm_timeout", 60)
 
         # 将翻译 LLM 模型保存到任务记录
         async with async_session_factory() as db:
@@ -248,7 +284,7 @@ class Worker:
                 0.7 + (0.25 * (i + 1) / total_langs),
                 f"正在翻译到「{lang}」（{i + 1}/{total_langs}）..."
             )
-            translated = await translator.translate_srt(srt_path, [lang], base_url, api_key, model, source_lang=source_lang)
+            translated = await translator.translate_srt(srt_path, [lang], base_url, api_key, model, source_lang=source_lang, timeout=llm_timeout)
             for lang_code, lang_path in translated.items():
                 await self._save_output_record(task.id, "bilingual_srt", f"{source_lang}-{lang_code}", lang_path)
 
