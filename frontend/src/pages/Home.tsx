@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { TaskListCard } from '@/components/shared/TaskListCard';
-import { Upload, Link as LinkIcon, FileAudio, Loader2, CheckCircle2, DownloadCloud, Sparkles, Zap } from 'lucide-react';
+import { Upload, Link as LinkIcon, FileAudio, Loader2, CheckCircle2, DownloadCloud, Sparkles, Zap, ChevronDown, ChevronUp, Search } from 'lucide-react';
 import type { Task } from '@/types';
 
 const MODELS = [
@@ -22,9 +22,13 @@ const OUTPUT_FORMATS = [
   { value: 'vtt', label: 'Web 字幕', ext: '.vtt', desc: '适用于网页播放器' },
 ];
 
-const LANGUAGES = [
+const HOT_LANGUAGES = [
   { value: 'zh', label: '中文' },
+  { value: 'en', label: '英文' },
   { value: 'ja', label: '日语' },
+];
+
+const MORE_LANGUAGES = [
   { value: 'ko', label: '韩语' },
   { value: 'fr', label: '法语' },
   { value: 'de', label: '德语' },
@@ -34,6 +38,11 @@ const LANGUAGES = [
   { value: 'th', label: '泰语' },
   { value: 'vi', label: '越南语' },
   { value: 'ar', label: '阿拉伯语' },
+  { value: 'it', label: '意大利语' },
+  { value: 'nl', label: '荷兰语' },
+  { value: 'pl', label: '波兰语' },
+  { value: 'tr', label: '土耳其语' },
+  { value: 'id', label: '印尼语' },
 ];
 
 export default function Home() {
@@ -45,6 +54,8 @@ export default function Home() {
   const [formats, setFormats] = useState<string[]>(['txt', 'srt', 'vtt']);
   const [langs, setLangs] = useState<string[]>(['zh']);
   const [translateEnabled, setTranslateEnabled] = useState(true);
+  const [moreExpanded, setMoreExpanded] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [modelStatus, setModelStatus] = useState<Record<string, boolean>>({});
   const [recentTasks, setRecentTasks] = useState<Task[]>([]);
@@ -354,8 +365,10 @@ export default function Home() {
                 {translateEnabled && (
                   <div className="space-y-2 animate-fade-in pt-1">
                     <label className="text-sm text-muted-foreground">翻译目标语言（可多选）</label>
+
+                    {/* 热门语言 */}
                     <div className="flex flex-wrap gap-2">
-                      {LANGUAGES.map((lang) => (
+                      {HOT_LANGUAGES.map((lang) => (
                         <label
                           key={lang.value}
                           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm cursor-pointer transition-all duration-200 border-2 ${
@@ -368,6 +381,58 @@ export default function Home() {
                           {lang.label}
                         </label>
                       ))}
+                    </div>
+
+                    {/* 更多语言展开/折叠 */}
+                    <div className="space-y-2">
+                      <button
+                        type="button"
+                        onClick={() => { setMoreExpanded(!moreExpanded); setSearchQuery(''); }}
+                        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        {moreExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                        {moreExpanded ? '收起更多语言' : `更多语言（${MORE_LANGUAGES.length}种）`}
+                      </button>
+
+                      {moreExpanded && (
+                        <div className="space-y-2 animate-fade-in">
+                          {/* 搜索框 */}
+                          <div className="relative">
+                            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                            <input
+                              type="text"
+                              placeholder="搜索语言..."
+                              value={searchQuery}
+                              onChange={(e) => setSearchQuery(e.target.value)}
+                              className="w-full h-8 pl-8 pr-3 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+                            />
+                          </div>
+
+                          {/* 更多语言网格 */}
+                          <div className="flex flex-wrap gap-2">
+                            {MORE_LANGUAGES.filter(
+                              (lang) => !searchQuery || lang.label.includes(searchQuery) || lang.value.includes(searchQuery)
+                            ).map((lang) => (
+                              <label
+                                key={lang.value}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm cursor-pointer transition-all duration-200 border-2 ${
+                                  langs.includes(lang.value)
+                                    ? 'border-primary bg-primary/5 text-primary shadow-sm'
+                                    : 'border-transparent bg-muted/50 hover:bg-muted hover:border-border'
+                                }`}
+                              >
+                                <input type="checkbox" checked={langs.includes(lang.value)} onChange={() => toggleLang(lang.value)} className="sr-only" />
+                                {lang.label}
+                              </label>
+                            ))}
+                            {MORE_LANGUAGES.filter(
+                              (lang) => !searchQuery || lang.label.includes(searchQuery) || lang.value.includes(searchQuery)
+                            ).length === 0 && (
+                              <p className="text-xs text-muted-foreground">未找到匹配的语言</p>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}

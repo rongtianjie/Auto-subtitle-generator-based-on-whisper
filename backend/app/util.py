@@ -74,6 +74,7 @@ def translate_subtitles(subtitles, client, model):
 
 
 LANG_NAME_MAP = {
+    "en": "English",
     "zh": "Simplified Chinese",
     "ja": "Japanese",
     "ko": "Korean",
@@ -85,6 +86,11 @@ LANG_NAME_MAP = {
     "ar": "Arabic",
     "th": "Thai",
     "vi": "Vietnamese",
+    "it": "Italian",
+    "nl": "Dutch",
+    "pl": "Polish",
+    "tr": "Turkish",
+    "id": "Indonesian",
 }
 
 # 源语言名称映射（Whisper 检测到的语言代码 → 可读名称，prompt 中会拼接）
