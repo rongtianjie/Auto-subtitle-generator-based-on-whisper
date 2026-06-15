@@ -24,7 +24,7 @@ import {
 import {
   Loader2, Search, File, Film, FileText, HardDrive,
   Download, Trash2, Eye, ChevronLeft, ChevronRight,
-  AlertCircle, X,
+  AlertCircle, X, ArrowUp, ArrowDown, ArrowUpDown,
 } from 'lucide-react';
 import type { FileItem, FileListResponse } from '@/types';
 
@@ -72,6 +72,10 @@ export default function FileManagement() {
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
 
+  // Sort
+  const [sortBy, setSortBy] = useState('created_at');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+
   // Selection
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
@@ -90,7 +94,7 @@ export default function FileManagement() {
   // Error
   const [error, setError] = useState<string | null>(null);
 
-  const loadFiles = useCallback(async (p: number, q: string, ft: string) => {
+  const loadFiles = useCallback(async (p: number, q: string, ft: string, sb: string, so: 'asc' | 'desc') => {
     setLoading(true);
     setError(null);
     try {
@@ -99,6 +103,8 @@ export default function FileManagement() {
         page_size: PAGE_SIZE,
         q: q || undefined,
         file_type: ft || undefined,
+        sort_by: sb,
+        sort_order: so,
       });
       setData(res.data);
       setSelectedIds(new Set());
@@ -109,8 +115,8 @@ export default function FileManagement() {
   }, []);
 
   useEffect(() => {
-    loadFiles(page, searchQuery, typeFilter);
-  }, [page, searchQuery, typeFilter, loadFiles]);
+    loadFiles(page, searchQuery, typeFilter, sortBy, sortOrder);
+  }, [page, searchQuery, typeFilter, sortBy, sortOrder, loadFiles]);
 
   const handleSearch = () => {
     setPage(1);
@@ -124,6 +130,17 @@ export default function FileManagement() {
   const handleTypeFilterChange = (value: string) => {
     setTypeFilter(value === 'all' ? '' : value);
     setPage(1);
+  };
+
+  // 排序切换：不同列 -> 升序；同列 -> 切换方向
+  const handleSort = (column: string) => {
+    setPage(1);
+    if (sortBy !== column) {
+      setSortBy(column);
+      setSortOrder('asc');
+    } else {
+      setSortOrder((o) => (o === 'asc' ? 'desc' : 'asc'));
+    }
   };
 
   const handleSelectAll = (checked: boolean) => {
@@ -243,7 +260,7 @@ export default function FileManagement() {
       });
       setDeleteDialogOpen(false);
       setDeleteTargets([]);
-      loadFiles(page, searchQuery, typeFilter);
+      loadFiles(page, searchQuery, typeFilter, sortBy, sortOrder);
     } catch {
       setError('删除文件失败');
     }
@@ -261,6 +278,18 @@ export default function FileManagement() {
   };
 
   const totalPages = data ? Math.ceil(data.total / PAGE_SIZE) : 0;
+
+  // 排序图标渲染
+  const renderSortIcon = (column: string) => {
+    if (sortBy !== column) {
+      return <ArrowUpDown className="w-3 h-3 text-muted-foreground/40" />;
+    }
+    return sortOrder === 'asc'
+      ? <ArrowUp className="w-3 h-3 text-primary" />
+      : <ArrowDown className="w-3 h-3 text-primary" />;
+  };
+
+  const gridCols = 'grid-cols-[36px_1.5fr_0.8fr_0.6fr_0.7fr_0.8fr_0.8fr_120px]';
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -363,7 +392,7 @@ export default function FileManagement() {
           ) : (
             <>
               {/* 表头（桌面端可见） */}
-              <div className="hidden md:grid grid-cols-[36px_1.5fr_0.8fr_0.6fr_0.8fr_0.8fr_120px] gap-4 px-6 py-3 text-xs text-muted-foreground border-b border-border/50 font-medium items-center">
+              <div className={`hidden md:grid ${gridCols} gap-4 px-6 py-3 text-xs text-muted-foreground border-b border-border/50 font-medium items-center`}>
                 <div>
                   <input
                     type="checkbox"
@@ -372,11 +401,30 @@ export default function FileManagement() {
                     onChange={(e) => handleSelectAll(e.target.checked)}
                   />
                 </div>
-                <span>文件名</span>
-                <span>类型</span>
-                <span>大小</span>
-                <span>关联任务</span>
-                <span>创建时间</span>
+                <button className="flex items-center gap-1 hover:text-foreground transition-colors text-left" onClick={() => handleSort('filename')}>
+                  文件名
+                  {renderSortIcon('filename')}
+                </button>
+                <button className="flex items-center gap-1 hover:text-foreground transition-colors text-left" onClick={() => handleSort('file_type')}>
+                  类型
+                  {renderSortIcon('file_type')}
+                </button>
+                <button className="flex items-center gap-1 hover:text-foreground transition-colors text-left" onClick={() => handleSort('file_size')}>
+                  大小
+                  {renderSortIcon('file_size')}
+                </button>
+                <button className="flex items-center gap-1 hover:text-foreground transition-colors text-left" onClick={() => handleSort('username')}>
+                  所属用户
+                  {renderSortIcon('username')}
+                </button>
+                <button className="flex items-center gap-1 hover:text-foreground transition-colors text-left" onClick={() => handleSort('task_title')}>
+                  关联任务
+                  {renderSortIcon('task_title')}
+                </button>
+                <button className="flex items-center gap-1 hover:text-foreground transition-colors text-left" onClick={() => handleSort('created_at')}>
+                  创建时间
+                  {renderSortIcon('created_at')}
+                </button>
                 <span className="text-center">操作</span>
               </div>
 
@@ -387,7 +435,7 @@ export default function FileManagement() {
                   return (
                     <div key={file.id} className="px-6 py-3 hover:bg-muted/40 transition-colors">
                       {/* 桌面端 */}
-                      <div className="hidden md:grid grid-cols-[36px_1.5fr_0.8fr_0.6fr_0.8fr_0.8fr_120px] gap-4 items-center">
+                      <div className={`hidden md:grid ${gridCols} gap-4 items-center`}>
                         <div>
                           <input
                             type="checkbox"
@@ -407,6 +455,9 @@ export default function FileManagement() {
                         </Badge>
                         <span className="text-sm text-muted-foreground" title={`${file.file_size} 字节`}>
                           {formatFileSize(file.file_size)}
+                        </span>
+                        <span className="text-sm text-muted-foreground truncate" title={file.username || '-'}>
+                          {file.username || <span className="text-muted-foreground/60">-</span>}
                         </span>
                         <span className="text-sm text-muted-foreground truncate" title={file.task_title || '-'}>
                           {file.task_title || <span className="text-muted-foreground/60">-</span>}
@@ -467,6 +518,7 @@ export default function FileManagement() {
                             <HardDrive className="w-3 h-3" />
                             {formatFileSize(file.file_size)}
                           </span>
+                          <span>{file.username || <span className="text-muted-foreground/60">-</span>}</span>
                           {file.task_title && (
                             <span className="truncate max-w-[200px]" title={file.task_title}>
                               {file.task_title}

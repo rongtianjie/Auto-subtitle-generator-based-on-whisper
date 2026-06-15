@@ -107,6 +107,7 @@ export interface FileItem {
   file_path: string
   task_id: string | null
   task_title: string | null
+  username: string | null
   created_at: string | null
 }
 

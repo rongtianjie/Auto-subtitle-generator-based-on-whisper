@@ -61,6 +61,7 @@ class FileItem(BaseModel):
     file_path: str  # 相对 storage 目录的路径
     task_id: str | None = None
     task_title: str | None = None
+    username: str | None = None
     created_at: str | None = None
 
 

@@ -676,12 +676,13 @@ async def list_files(
                 "file_path": rel_path,
                 "task_id": str(t.id),
                 "task_title": t.title,
+                "username": t.user.username if t.user else None,
                 "created_at": str(t.created_at) if t.created_at else None,
             })
 
     # 2. 查询所有 TaskOutput 记录
     output_result = await db.execute(
-        select(TaskOutput).options(selectinload(TaskOutput.task))
+        select(TaskOutput).options(selectinload(TaskOutput.task).selectinload(Task.user))
     )
     outputs = output_result.scalars().all()
     for o in outputs:
@@ -699,6 +700,7 @@ async def list_files(
                 "file_path": rel_path,
                 "task_id": str(o.task_id),
                 "task_title": o.task.title if o.task else None,
+                "username": o.task.user.username if o.task and o.task.user else None,
                 "created_at": str(o.created_at) if o.created_at else None,
             })
 
@@ -721,6 +723,7 @@ async def list_files(
                             "file_path": rel_path,
                             "task_id": None,
                             "task_title": None,
+                            "username": None,
                             "created_at": None,
                         })
                     except OSError:
@@ -741,6 +744,12 @@ async def list_files(
         all_items.sort(key=lambda x: x["filename"].lower(), reverse=reverse)
     elif sort_by == "file_size":
         all_items.sort(key=lambda x: x["file_size"], reverse=reverse)
+    elif sort_by == "file_type":
+        all_items.sort(key=lambda x: x["file_type"] or "", reverse=reverse)
+    elif sort_by == "task_title":
+        all_items.sort(key=lambda x: x["task_title"] or "", reverse=reverse)
+    elif sort_by == "username":
+        all_items.sort(key=lambda x: x["username"] or "", reverse=reverse)
     else:  # created_at
         def _sort_key(item):
             dt = item.get("created_at")
