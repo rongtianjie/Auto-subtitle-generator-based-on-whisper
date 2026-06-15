@@ -4,6 +4,8 @@ import asyncio
 import yt_dlp
 from loguru import logger
 
+from .cookie_manager import cookie_manager
+
 
 class YtDlpDownloader:
     """在线视频下载封装"""
@@ -12,11 +14,18 @@ class YtDlpDownloader:
         """下载在线视频，返回本地文件路径"""
         logger.info(f"下载在线视频: {url}")
 
+        # 自动获取 cookies（如 B 站需要）
+        cookies_path = await cookie_manager.get_cookies()
+
         ydl_opts = {
             "outtmpl": os.path.join(output_dir, "%(title)s.%(ext)s"),
             "format": "bestvideo+bestaudio/best",
             "merge_output_format": "mp4",
         }
+
+        if cookies_path:
+            ydl_opts["cookiefile"] = cookies_path
+            logger.info(f"使用 cookies 文件: {cookies_path}")
 
         def _download_sync():
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:

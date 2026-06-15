@@ -13,6 +13,10 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# 安装 Playwright + Chromium（用于自动获取 B 站 cookies）
+RUN pip install --no-cache-dir playwright && \
+    playwright install --with-deps chromium 2>&1 | tail -5
+
 # 复制代码
 COPY . .
 

@@ -76,6 +76,7 @@ export default function TaskDetail() {
           progress: progress.progress,
           // SSE 消息为 null 时不覆盖，避免轮询保留的消息被冲掉
           ...(progress.message ? { progress_message: progress.message } : {}),
+          ...(progress.error_message ? { error_message: progress.error_message } : {}),
           queue_position: progress.queue_position,
           estimated_seconds: progress.estimated_seconds,
         };

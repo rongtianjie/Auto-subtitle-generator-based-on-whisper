@@ -5,6 +5,7 @@ interface SSEProgress {
   status: string;
   progress: number;
   message: string | null;
+  error_message: string | null;
   queue_position: number | null;
   estimated_seconds: number | null;
 }

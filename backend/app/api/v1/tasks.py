@@ -310,6 +310,7 @@ async def stream_task_progress(task_id: UUID):
                     "status": task.status,
                     "progress": task.progress,
                     "message": task.progress_message,
+                    "error_message": task.error_message,
                     "queue_position": task.queue_position,
                     "estimated_seconds": task.estimated_seconds,
                 }
