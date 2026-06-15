@@ -23,7 +23,7 @@ class Translator:
             logger.info(f"翻译字幕从 {source_lang} 到 {lang}...")
             translated = await translate_subtitles_async(subtitles, client, model, concurrency=concurrency, target_lang=lang, source_lang=source_lang)
             output_dir = os.path.dirname(srt_path)
-            lang_path = os.path.join(output_dir, f"subtitles_{lang}.srt")
+            lang_path = os.path.join(output_dir, f"subtitles.{lang}.srt")
             write_srt_file(lang_path, translated)
             results[lang] = lang_path
 

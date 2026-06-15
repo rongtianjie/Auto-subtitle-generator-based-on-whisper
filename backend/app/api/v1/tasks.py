@@ -65,7 +65,7 @@ async def create_task(
     source_url: str = Form(None),
     title: str = Form(None),
     whisper_model: str = Form("base"),
-    output_formats: str = Form('["txt","srt","bilingual_srt"]'),
+    output_formats: str = Form('["txt","srt","vtt"]'),
     translate_target_langs: str = Form(None),
     file: UploadFile = File(None),
     db: AsyncSession = Depends(get_db),

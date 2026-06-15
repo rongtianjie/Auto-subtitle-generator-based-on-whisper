@@ -21,6 +21,24 @@ def read_srt_file(file_path):
 def write_srt_file(file_path, subtitles):
     with open(file_path, 'w', encoding='utf-8') as file:
         file.write(srt.compose(subtitles))
+
+
+def write_vtt_file(file_path, subtitles):
+    """将 srt.Subtitle 列表写入 VTT 格式文件"""
+    with open(file_path, 'w', encoding='utf-8') as file:
+        file.write("WEBVTT\n\n")
+        for sub in subtitles:
+            start = str(sub.start).replace(",", ".")
+            end = str(sub.end).replace(",", ".")
+            # 补齐毫秒到 3 位
+            if "." in start:
+                before_dot, after_dot = start.split(".")
+                start = f"{before_dot}.{after_dot[:3]:0<3}"
+            if "." in end:
+                before_dot, after_dot = end.split(".")
+                end = f"{before_dot}.{after_dot[:3]:0<3}"
+            file.write(f"{start} --> {end}\n")
+            file.write(f"{sub.content}\n\n")
         
 def translate_to_chinese(text, client, model):
     completion = client.chat.completions.create(

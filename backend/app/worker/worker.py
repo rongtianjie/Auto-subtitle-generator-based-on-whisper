@@ -244,12 +244,20 @@ class Worker:
             await self._save_output_record(task.id, "txt", None, txt_path)
 
         # 生成 SRT
-        if "srt" in formats or "bilingual_srt" in formats:
+        if "srt" in formats:
             writer = get_writer("srt", output_dir)
             srt_path = os.path.join(output_dir, "subtitles.srt")
             writer(whisper_result, "subtitles.srt")
             output_files["srt"] = os.path.join(output_dir, "subtitles.srt")
             await self._save_output_record(task.id, "srt", None, os.path.join(output_dir, "subtitles.srt"))
+
+        # 生成 VTT
+        if "vtt" in formats:
+            writer = get_writer("vtt", output_dir)
+            vtt_path = os.path.join(output_dir, "subtitles.vtt")
+            writer(whisper_result, "subtitles.vtt")
+            output_files["vtt"] = os.path.join(output_dir, "subtitles.vtt")
+            await self._save_output_record(task.id, "vtt", None, os.path.join(output_dir, "subtitles.vtt"))
 
         return output_files
 
@@ -286,7 +294,15 @@ class Worker:
             )
             translated = await translator.translate_srt(srt_path, [lang], base_url, api_key, model, source_lang=source_lang, timeout=llm_timeout)
             for lang_code, lang_path in translated.items():
+                # 保存双语 SRT
                 await self._save_output_record(task.id, "bilingual_srt", f"{source_lang}-{lang_code}", lang_path)
+                # 如果选择了 VTT 格式，也生成双语 VTT
+                if "vtt" in output_files:
+                    from app.util import write_vtt_file, read_srt_file
+                    vtt_lang_path = lang_path.replace(".srt", ".vtt")
+                    vtt_subtitles = read_srt_file(lang_path)
+                    write_vtt_file(vtt_lang_path, vtt_subtitles)
+                    await self._save_output_record(task.id, "bilingual_vtt", f"{source_lang}-{lang_code}", vtt_lang_path)
 
         await self._update_progress(task.id, 0.95, "翻译完成，正在完成后续处理...")
 

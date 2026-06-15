@@ -17,9 +17,9 @@ const MODELS = [
 ];
 
 const OUTPUT_FORMATS = [
-  { value: 'txt', label: '纯文本 (.txt)' },
-  { value: 'srt', label: '英文字幕 (.srt)' },
-  { value: 'bilingual_srt', label: '双语字幕 (.srt)' },
+  { value: 'txt', label: '纯文本', ext: '.txt', desc: '完整转写文本' },
+  { value: 'srt', label: '原始字幕', ext: '.srt', desc: '依据音频语言生成' },
+  { value: 'vtt', label: 'Web 字幕', ext: '.vtt', desc: '适用于网页播放器' },
 ];
 
 const LANGUAGES = [
@@ -42,8 +42,9 @@ export default function Home() {
   const [url, setUrl] = useState('');
   const [title, setTitle] = useState('');
   const [model, setModel] = useState('base');
-  const [formats, setFormats] = useState<string[]>(['txt', 'srt', 'bilingual_srt']);
+  const [formats, setFormats] = useState<string[]>(['txt', 'srt', 'vtt']);
   const [langs, setLangs] = useState<string[]>(['zh']);
+  const [translateEnabled, setTranslateEnabled] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [modelStatus, setModelStatus] = useState<Record<string, boolean>>({});
   const [recentTasks, setRecentTasks] = useState<Task[]>([]);
@@ -114,7 +115,7 @@ export default function Home() {
         formData.append('source_url', url);
         formData.append('title', title || url);
       }
-      if (formats.includes('bilingual_srt') && langs.length > 0) {
+      if (translateEnabled && langs.length > 0) {
         formData.append('translate_target_langs', JSON.stringify(langs));
       }
       const res = await taskApi.create(formData);
@@ -306,71 +307,95 @@ export default function Home() {
             </div>
 
             <div className="space-y-6">
-              {/* Output Formats */}
+              {/* Output Formats - Card Grid */}
               <div className="space-y-2">
                 <label className="text-sm font-medium">输出格式</label>
-                <div className="flex flex-wrap gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   {OUTPUT_FORMATS.map((f) => (
                     <label
                       key={f.value}
-                      className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm cursor-pointer transition-all duration-200 border-2 ${
+                      className={`flex flex-col gap-1 p-3 rounded-xl border-2 cursor-pointer transition-all duration-200 ${
                         formats.includes(f.value)
-                          ? 'border-primary bg-primary/5 text-primary shadow-sm'
+                          ? 'border-primary bg-primary/10 text-primary shadow-sm'
                           : 'border-transparent bg-muted/50 hover:bg-muted hover:border-border'
                       }`}
                     >
-                      <input type="checkbox" checked={formats.includes(f.value)} onChange={() => toggleFormat(f.value)} className="accent-primary sr-only" />
-                      {f.label}
+                      <input type="checkbox" checked={formats.includes(f.value)} onChange={() => toggleFormat(f.value)} className="sr-only" />
+                      <span className="text-sm font-medium">{f.label}</span>
+                      <span className="text-xs text-muted-foreground">{f.ext}</span>
+                      <span className="text-xs text-muted-foreground/70">{f.desc}</span>
                     </label>
                   ))}
                 </div>
               </div>
 
-              {/* Languages */}
-              {formats.includes('bilingual_srt') && (
-                <div className="space-y-2 animate-fade-in">
-                  <label className="text-sm font-medium">目标语言（可多选）</label>
-                  <div className="flex flex-wrap gap-2">
-                    {LANGUAGES.map((lang) => (
-                      <label
-                        key={lang.value}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm cursor-pointer transition-all duration-200 border-2 ${
-                          langs.includes(lang.value)
-                            ? 'border-primary bg-primary/5 text-primary shadow-sm'
-                            : 'border-transparent bg-muted/50 hover:bg-muted hover:border-border'
-                        }`}
-                      >
-                        <input type="checkbox" checked={langs.includes(lang.value)} onChange={() => toggleLang(lang.value)} className="accent-primary sr-only" />
-                        {lang.label}
-                      </label>
-                    ))}
+              {/* Translation - Independent Toggle */}
+              <div className="space-y-2">
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={translateEnabled}
+                    onClick={() => setTranslateEnabled(!translateEnabled)}
+                    className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
+                      translateEnabled ? 'bg-primary' : 'bg-input'
+                    }`}
+                  >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition-transform ${
+                      translateEnabled ? 'translate-x-[18px]' : 'translate-x-[2px]'
+                    }`} />
+                  </button>
+                  <div className="flex flex-col">
+                    <span className="text-sm font-medium">开启翻译</span>
+                    <span className="text-xs text-muted-foreground">将原始字幕翻译为目标语言</span>
                   </div>
-                </div>
-              )}
+                </label>
 
-              {/* Submit */}
-              <div className="pt-2">
-                <Button
-                  className="w-full lg:w-auto lg:min-w-[240px]"
-                  variant="gradient"
-                  size="lg"
-                  disabled={submitting || (sourceType === 'upload' && !file) || (sourceType === 'url' && !url)}
-                  onClick={handleSubmit}
-                >
-                  {submitting ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      提交中...
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="w-4 h-4" />
-                      提交任务
-                    </>
-                  )}
-                </Button>
+                {translateEnabled && (
+                  <div className="space-y-2 animate-fade-in pt-1">
+                    <label className="text-sm text-muted-foreground">翻译目标语言（可多选）</label>
+                    <div className="flex flex-wrap gap-2">
+                      {LANGUAGES.map((lang) => (
+                        <label
+                          key={lang.value}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm cursor-pointer transition-all duration-200 border-2 ${
+                            langs.includes(lang.value)
+                              ? 'border-primary bg-primary/5 text-primary shadow-sm'
+                              : 'border-transparent bg-muted/50 hover:bg-muted hover:border-border'
+                          }`}
+                        >
+                          <input type="checkbox" checked={langs.includes(lang.value)} onChange={() => toggleLang(lang.value)} className="sr-only" />
+                          {lang.label}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
+          </div>
+
+          {/* Submit Button - Full Width Bottom */}
+          <div className="flex justify-center pt-4">
+            <Button
+              className="w-full lg:w-auto lg:min-w-[320px] h-12 text-base"
+              variant="gradient"
+              size="lg"
+              disabled={submitting || (sourceType === 'upload' && !file) || (sourceType === 'url' && !url)}
+              onClick={handleSubmit}
+            >
+              {submitting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  提交中...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4" />
+                  提交任务
+                </>
+              )}
+            </Button>
           </div>
         </CardContent>
       </Card>

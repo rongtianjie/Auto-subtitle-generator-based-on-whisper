@@ -9,7 +9,7 @@ class TaskCreate(BaseModel):
     source_url: Optional[str] = None
     title: Optional[str] = None
     whisper_model: str = Field(default="base", pattern="^(tiny|base|small|medium|large)$")
-    output_formats: List[str] = Field(default=["txt", "srt", "bilingual_srt"])
+    output_formats: List[str] = Field(default=["txt", "srt", "vtt"])
     translate_target_langs: Optional[List[str]] = None
 
 
