@@ -21,7 +21,7 @@
 
 ## Overview
 
-SubWeaver is a modern, full-stack web application that leverages OpenAI Whisper to automatically transcribe speech from audio and video files into text and subtitles. It supports file uploads and online video URLs (YouTube, etc.), generates multiple output formats (TXT, SRT, bilingual SRT), and translates subtitles into various languages via an OpenAI-compatible LLM API.
+SubWeaver is a modern, full-stack web application that leverages OpenAI Whisper to automatically transcribe speech from audio and video files into text and subtitles. It supports file uploads and online video URLs (YouTube, etc.), generates multiple output formats (TXT, SRT, VTT, bilingual SRT/VTT), and translates subtitles into various languages via an OpenAI-compatible LLM API.
 
 Built with FastAPI + React + PostgreSQL, it features a clean dashboard, real-time progress streaming via SSE, user authentication, admin panel, persistent logging, and Docker Compose deployment for easy setup.
 
@@ -33,7 +33,7 @@ Built with FastAPI + React + PostgreSQL, it features a clean dashboard, real-tim
 - **Multi-source input** — Upload local audio/video files or provide an online video URL (YouTube, etc.)
 - **AI-powered transcription** — Multiple Whisper model sizes (`tiny`, `base`, `small`, `medium`, `large`) to balance speed and accuracy
 - **Whisper model management** — View download status, download, and delete Whisper models directly from the web UI
-- **Flexible output formats** — Plain text (TXT), standard subtitles (SRT), bilingual subtitles (SRT with original + translation)
+- **Flexible output formats** — Plain text (TXT), standard subtitles (SRT, VTT), bilingual subtitles (SRT / VTT with original + translation)
 - **Multi-language translation** — Translate subtitles into 11+ languages via OpenAI-compatible LLM (Chinese, Japanese, Korean, French, German, Spanish, Russian, Portuguese, Arabic, Thai, Vietnamese, and more)
 - **Real-time progress** — Server-Sent Events (SSE) for live task progress updates
 
@@ -41,9 +41,10 @@ Built with FastAPI + React + PostgreSQL, it features a clean dashboard, real-tim
 - **User authentication** — Register, login, JWT with access/refresh tokens, "Remember Me" and password saving support
 - **Initial admin setup** — Guided first-run setup page at `/admin/setup` to create the initial administrator
 - **Role-based access** — User and Admin roles with separate interfaces
-- **Admin dashboard** — Task management, user management, system configuration, health checks, statistics, LLM connection testing, and model list fetching
+- **Admin dashboard** — Task management, user management (toggle-active, delete, reset password), system configuration, file management (list, filter, sort, preview, download, soft/hard delete), health checks, statistics, LLM connection testing, and model list fetching
 - **System log viewer** — Admin can view and stream real-time logs directly from the web UI
 - **Guest mode** — Create transcription tasks without registration (limited quota)
+- **Task cancellation** — Users can cancel their own queued or processing tasks; admins can cancel any task
 - **Sequential task queue** — Fair queue with estimated wait times, real-time position updates
 - **Health check system** — Automatic startup verification of database, ffmpeg, Whisper model, and LLM connection
 - **Configurable file retention** — Auto-cleanup of expired files
@@ -125,9 +126,11 @@ Copy `backend/.env.example` to `backend/.env` and adjust the following key varia
 | `GET` | `/api/v1/auth/me` | Get current user info | JWT |
 | `GET` | `/api/v1/auth/admin-exists` | Check if an admin exists in the system | No |
 | `POST` | `/api/v1/auth/register-admin` | Register the initial admin (only when none exists) | No |
-| `POST` | `/api/v1/tasks` | Create a transcription task | Optional (guest) |
+| `GET` | `/api/v1/tasks/defaults` | Get default task creation config (model, etc.) | No |
+| `POST` | `/api/v1/tasks` | Create a transcription task (upload or URL) | Optional (guest) |
 | `GET` | `/api/v1/tasks` | List user tasks | JWT |
 | `GET` | `/api/v1/tasks/{id}` | Get task details | No |
+| `PUT` | `/api/v1/tasks/{id}/cancel` | Cancel own queued/processing task | Optional (guest) |
 | `DELETE` | `/api/v1/tasks/{id}` | Delete a task | JWT |
 | `GET` | `/api/v1/tasks/{id}/stream` | SSE real-time progress | No |
 | `GET` | `/api/v1/tasks/{id}/outputs` | List task outputs | No |
@@ -143,8 +146,16 @@ Copy `backend/.env.example` to `backend/.env` and adjust the following key varia
 | `DELETE` | `/api/v1/admin/tasks/{id}` | Delete any task | Admin |
 | `PUT` | `/api/v1/admin/tasks/{id}/cancel` | Cancel a queued/processing task | Admin |
 | `PUT` | `/api/v1/admin/tasks/{id}/retry` | Retry a failed task | Admin |
-| `GET` | `/api/v1/admin/users` | List all users | Admin |
+| `GET` | `/api/v1/admin/users` | List all users (search, paginate) | Admin |
 | `PUT` | `/api/v1/admin/users/{id}/role` | Update user role | Admin |
+| `PUT` | `/api/v1/admin/users/{id}/toggle-active` | Enable/disable user | Admin |
+| `DELETE` | `/api/v1/admin/users/{id}` | Delete user (tasks preserved) | Admin |
+| `POST` | `/api/v1/admin/users/{id}/reset-password` | Reset user to random 6-char password | Admin |
+| `GET` | `/api/v1/admin/users/{id}/tasks` | List specific user's tasks | Admin |
+| `GET` | `/api/v1/admin/files` | List all files (upload, output, orphan) with filter/sort | Admin |
+| `DELETE` | `/api/v1/admin/files` | Delete files (soft/hard mode) | Admin |
+| `GET` | `/api/v1/admin/files/{file_id}/download` | Download any file | Admin |
+| `GET` | `/api/v1/admin/files/{file_id}/preview` | Preview file content (text) or stream (media) | Admin |
 | `GET` | `/api/v1/admin/config` | Get system config | Admin |
 | `PUT` | `/api/v1/admin/config/{key}` | Update system config | Admin |
 | `POST` | `/api/v1/admin/llm/test` | Test LLM connection and latency | Admin |
@@ -154,8 +165,8 @@ Copy `backend/.env.example` to `backend/.env` and adjust the following key varia
 | `GET` | `/api/v1/admin/logs/{filename}/stream` | SSE real-time log stream | Admin |
 
 | `GET` | `/api/v1/models` | List all Whisper models with download status | No |
-| `POST` | `/api/v1/models/{name}/download` | Download a Whisper model | No |
-| `DELETE` | `/api/v1/models` | Delete all downloaded Whisper models | No |
+| `POST` | `/api/v1/models/{name}/download` | Download a Whisper model | Admin |
+| `DELETE` | `/api/v1/models` | Delete all downloaded Whisper models | Admin |
 
 Full API documentation is available at `/docs` when the backend is running.
 
