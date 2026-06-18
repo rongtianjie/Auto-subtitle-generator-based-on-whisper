@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from '@/hooks/useAuth';
 import { BackendHealthProvider } from '@/hooks/useBackendHealth';
+import { AppContextProvider } from '@/context/AppContext';
 import { HealthMonitor } from '@/components/shared/HealthMonitor';
 import { Layout } from '@/components/layout/Layout';
 import { AdminLayout } from '@/components/layout/AdminLayout';
@@ -33,30 +34,32 @@ function App() {
     <BrowserRouter>
       <BackendHealthProvider>
         <AuthProvider>
-          <HealthMonitor />
-          <Routes>
-            <Route element={<Layout />}>
-              <Route path="/" element={<Home />} />
-              <Route path="/tasks/:id" element={<TaskDetail />} />
-              <Route path="/admin/setup" element={<AdminSetup />} />
+          <AppContextProvider>
+            <HealthMonitor />
+            <Routes>
+              <Route element={<Layout />}>
+                <Route path="/" element={<Home />} />
+                <Route path="/tasks/:id" element={<TaskDetail />} />
+                <Route path="/admin/setup" element={<AdminSetup />} />
 
-              {/* Redirects for removed pages */}
-              <Route path="/login" element={<Navigate to="/" replace />} />
-              <Route path="/register" element={<Navigate to="/" replace />} />
-              <Route path="/dashboard" element={<Navigate to="/#recent" replace />} />
-            </Route>
+                {/* Redirects for removed pages */}
+                <Route path="/login" element={<Navigate to="/" replace />} />
+                <Route path="/register" element={<Navigate to="/" replace />} />
+                <Route path="/dashboard" element={<Navigate to="/#recent" replace />} />
+              </Route>
 
-            {/* Admin routes with sidebar layout */}
-            <Route path="/admin" element={<AdminLayout />}>
-              <Route index element={<Suspense fallback={<PageLoader />}><Overview /></Suspense>} />
-              <Route path="config" element={<Suspense fallback={<PageLoader />}><SystemConfig /></Suspense>} />
-              <Route path="models" element={<Suspense fallback={<PageLoader />}><ModelManagement /></Suspense>} />
-              <Route path="llm" element={<Suspense fallback={<PageLoader />}><LlmConfig /></Suspense>} />
-              <Route path="logs" element={<Suspense fallback={<PageLoader />}><LogViewer /></Suspense>} />
-              <Route path="users" element={<Suspense fallback={<PageLoader />}><UserManagement /></Suspense>} />
-              <Route path="files" element={<Suspense fallback={<PageLoader />}><FileManagement /></Suspense>} />
-            </Route>
-          </Routes>
+              {/* Admin routes with sidebar layout */}
+              <Route path="/admin" element={<AdminLayout />}>
+                <Route index element={<Suspense fallback={<PageLoader />}><Overview /></Suspense>} />
+                <Route path="config" element={<Suspense fallback={<PageLoader />}><SystemConfig /></Suspense>} />
+                <Route path="models" element={<Suspense fallback={<PageLoader />}><ModelManagement /></Suspense>} />
+                <Route path="llm" element={<Suspense fallback={<PageLoader />}><LlmConfig /></Suspense>} />
+                <Route path="logs" element={<Suspense fallback={<PageLoader />}><LogViewer /></Suspense>} />
+                <Route path="users" element={<Suspense fallback={<PageLoader />}><UserManagement /></Suspense>} />
+                <Route path="files" element={<Suspense fallback={<PageLoader />}><FileManagement /></Suspense>} />
+              </Route>
+            </Routes>
+          </AppContextProvider>
         </AuthProvider>
       </BackendHealthProvider>
     </BrowserRouter>
