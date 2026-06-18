@@ -17,16 +17,42 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// 响应拦截器：处理 token 过期
+// 响应拦截器：处理错误响应（包括所有 4xx/5xx）
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('refresh_token');
-      sessionStorage.removeItem('access_token');
-      sessionStorage.removeItem('refresh_token');
+    // 处理 API 错误响应
+    if (error.response) {
+      const data = error.response.data;
+      const status = error.response.status;
+
+      // 提取标准错误格式
+      const errorMessage = data?.message || error.message || "Unknown error";
+      const errorCode = data?.error_code || `HTTP_${status}`;
+
+      // Token 过期或无效 - 清除存储
+      if (status === 401 || errorCode === "TOKEN_EXPIRED" || errorCode === "UNAUTHORIZED") {
+        localStorage.removeItem("access_token");
+        localStorage.removeItem("refresh_token");
+        sessionStorage.removeItem("access_token");
+        sessionStorage.removeItem("refresh_token");
+      }
+
+      // 创建标准化错误对象
+      error.isApiError = true;
+      error.errorCode = errorCode;
+      error.statusCode = status;
+      error.userMessage = errorMessage;
+      error.details = data?.details;
+    } else if (error.request) {
+      // 网络错误（无响应）
+      error.isNetworkError = true;
+      error.userMessage = "网络连接失败，请检查网络";
+    } else {
+      // 请求配置错误
+      error.userMessage = "请求配置错误";
     }
+
     return Promise.reject(error);
   }
 );

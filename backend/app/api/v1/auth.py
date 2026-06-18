@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -9,6 +9,12 @@ from app.schemas.auth import (
 )
 from app.services.auth_service import auth_service
 from app.core.security import decode_access_token, create_access_token
+from app.core.exceptions import (
+    InvalidCredentialsException,
+    TokenExpiredException,
+    ForbiddenException,
+    AlreadyExistsException,
+)
 
 router = APIRouter(prefix="/auth", tags=["认证"])
 
@@ -26,7 +32,7 @@ async def register(data: UserRegister, db: AsyncSession = Depends(get_db)):
             created_at=str(user.created_at),
         )
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise AlreadyExistsException(resource="User", identifier=data.username)
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -35,7 +41,7 @@ async def login(data: UserLogin, db: AsyncSession = Depends(get_db)):
         user, access_token, refresh_token = await auth_service.login(db, data.username, data.password)
         return TokenResponse(access_token=access_token, refresh_token=refresh_token)
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
+        raise InvalidCredentialsException()
 
 
 @router.post("/refresh", response_model=TokenResponse)
@@ -47,7 +53,7 @@ async def refresh_token(data: RefreshRequest):
         new_access_token = create_access_token({"sub": user_id, "role": role})
         return TokenResponse(access_token=new_access_token, refresh_token=data.refresh_token)
     except ValueError:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="refresh token 已过期或无效")
+        raise TokenExpiredException()
 
 
 @router.get("/admin-exists")
@@ -72,9 +78,9 @@ async def register_admin(data: UserRegister, db: AsyncSession = Depends(get_db))
             created_at=str(user.created_at),
         )
     except PermissionError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+        raise ForbiddenException(str(e))
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise AlreadyExistsException(resource="User", identifier=data.username)
 
 
 @router.get("/me", response_model=UserResponse)

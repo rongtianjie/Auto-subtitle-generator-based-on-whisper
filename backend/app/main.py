@@ -4,10 +4,17 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.exceptions import RequestValidationError
 from loguru import logger
 
 from app.config import settings
 from app.core.logging import setup_logging
+from app.core.exceptions import AppException
+from app.core.exception_handlers import (
+    app_exception_handler,
+    general_exception_handler,
+    validation_exception_handler,
+)
 from app.database import async_session_factory
 from app.startup_checker.checker import checker
 from app.startup_checker.checks.db_check import check_database
@@ -120,6 +127,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 异常处理器
+app.add_exception_handler(AppException, app_exception_handler)
+app.add_exception_handler(RequestValidationError, validation_exception_handler)
+app.add_exception_handler(Exception, general_exception_handler)
 
 # 注册路由
 from app.api.v1 import auth, tasks, health, admin, files, models

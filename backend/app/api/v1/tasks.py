@@ -6,7 +6,7 @@ import uuid
 from uuid import UUID
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status, Query, Request
+from fastapi import APIRouter, Depends, UploadFile, File, Form, status, Query, Request
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -24,6 +24,14 @@ from app.services.config_service import get_config_value
 from app.core.task_queue import task_queue
 from app.core.storage import storage
 from app.config import settings
+from app.core.exceptions import (
+    ValidationException,
+    FileTooLargeException,
+    NotFoundException,
+    QuotaExceededException,
+    OperationNotAllowedException,
+    ForbiddenException,
+)
 
 router = APIRouter(prefix="/tasks", tags=["任务"])
 
@@ -76,19 +84,19 @@ async def create_task(
     try:
         parsed_formats = json.loads(output_formats)
     except (json.JSONDecodeError, TypeError):
-        raise HTTPException(status_code=400, detail="output_formats 格式无效")
+        raise ValidationException(detail="output_formats 格式无效")
 
     try:
         parsed_langs = json.loads(translate_target_langs) if translate_target_langs else None
     except (json.JSONDecodeError, TypeError):
-        raise HTTPException(status_code=400, detail="translate_target_langs 格式无效")
+        raise ValidationException(detail="translate_target_langs 格式无效")
 
     file_path = None
     source_filename = None
 
     if source_type == "upload":
         if not file:
-            raise HTTPException(status_code=400, detail="上传模式需要提供文件")
+            raise ValidationException(message="上传模式需要提供文件")
 
         # 校验文件大小
         max_file_size_mb = await get_config_value(db, "max_file_size_mb", settings.MAX_FILE_SIZE_MB)
@@ -97,20 +105,14 @@ async def create_task(
         # 检查 Content-Length 头（快速拒绝）
         content_length = request.headers.get("content-length")
         if content_length and int(content_length) > max_size_bytes:
-            raise HTTPException(
-                status_code=400,
-                detail=f"文件大小超过限制（{max_file_size_mb}MB）",
-            )
+            raise FileTooLargeException(max_size_mb=max_file_size_mb)
 
         # 检查实际文件大小（seek 到末尾获取大小）
         file.file.seek(0, 2)
         actual_size = file.file.tell()
         file.file.seek(0)
         if actual_size > max_size_bytes:
-            raise HTTPException(
-                status_code=400,
-                detail=f"文件大小超过限制（{max_file_size_mb}MB）",
-            )
+            raise FileTooLargeException(max_size_mb=max_file_size_mb)
 
         # 流式写入，避免将整个文件加载到内存
         temp_id = uuid.uuid4()
@@ -130,10 +132,7 @@ async def create_task(
         today_count = await task_service.count_guest_tasks_today(db, client_ip)
 
         if today_count >= guest_limit:
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail="今日任务已达上限，请登录后继续使用",
-            )
+            raise QuotaExceededException(message="今日任务已达上限，请登录后继续使用")
     else:
         client_ip = None
     # --- 校验结束 ---
@@ -197,7 +196,7 @@ async def get_queue_status(db: AsyncSession = Depends(get_db)):
 async def get_task(task_id: UUID, db: AsyncSession = Depends(get_db)):
     task = await task_service.get_task(db, task_id)
     if not task:
-        raise HTTPException(status_code=404, detail="任务不存在")
+        raise NotFoundException(resource="Task", identifier=str(task_id))
     return _task_to_response(task)
 
 
@@ -209,9 +208,9 @@ async def delete_task(
 ):
     task = await task_service.get_task(db, task_id)
     if not task:
-        raise HTTPException(status_code=404, detail="任务不存在")
+        raise NotFoundException(resource="Task", identifier=str(task_id))
     if task.user_id != current_user.id and current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="无权删除此任务")
+        raise ForbiddenException("无权删除此任务")
     await task_service.delete_task(db, task_id)
     return {"message": "任务已删除"}
 
@@ -243,17 +242,17 @@ async def cancel_own_task(
     result = await db.execute(select(Task).where(Task.id == task_id))
     task = result.scalar_one_or_none()
     if not task:
-        raise HTTPException(status_code=404, detail="任务不存在")
+        raise NotFoundException(resource="Task", identifier=str(task_id))
 
     # 任务所有者或管理员可以取消
     if current_user and task.user_id and task.user_id != current_user.id:
         if current_user.role != "admin":
-            raise HTTPException(status_code=403, detail="无权取消此任务")
+            raise ForbiddenException("无权取消此任务")
     elif not current_user and task.user_id is not None:
-        raise HTTPException(status_code=403, detail="无权取消此任务")
+        raise ForbiddenException("无权取消此任务")
 
     if task.status not in ("queued", "processing"):
-        raise HTTPException(status_code=400, detail="只能取消正在处理或排队中的任务")
+        raise OperationNotAllowedException("只能取消正在处理或排队中的任务")
 
     task.cancel_requested = True
     task.progress_message = "正在等待当前阶段结束..."
@@ -278,11 +277,11 @@ async def download_task_output(
     )
     output = result.scalar_one_or_none()
     if not output:
-        raise HTTPException(status_code=404, detail="输出文件不存在")
+        raise NotFoundException(resource="Output", identifier=str(output_id))
 
     file_path = output.file_path
     if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="文件已不存在")
+        raise NotFoundException(resource="File", identifier=str(output_id))
 
     filename = os.path.basename(file_path)
     return FileResponse(
