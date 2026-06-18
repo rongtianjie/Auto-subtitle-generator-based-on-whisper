@@ -5,22 +5,36 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  timeout: 30000, // 30 秒超时
 });
 
-// 请求拦截器：注入 token（同时检查 localStorage 和 sessionStorage）
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('access_token')
-    || sessionStorage.getItem('access_token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+// 请求拦截器：注入 token 和自动重试
+api.interceptors.request.use(
+  (config) => {
+    const token =
+      localStorage.getItem('access_token') || sessionStorage.getItem('access_token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+
+    // 添加重试计数（仅用于追踪）
+    if (!config.headers['x-retry-count']) {
+      config.headers['x-retry-count'] = 0;
+    }
+
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
   }
-  return config;
-});
+);
 
-// 响应拦截器：处理错误响应（包括所有 4xx/5xx）
+// 响应拦截器：处理错误响应、超时和自动重试
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
+    const config = error.config;
+
     // 处理 API 错误响应
     if (error.response) {
       const data = error.response.data;
@@ -44,10 +58,37 @@ api.interceptors.response.use(
       error.statusCode = status;
       error.userMessage = errorMessage;
       error.details = data?.details;
+    } else if (error.code === 'ECONNABORTED') {
+      // 超时错误
+      error.isTimeoutError = true;
+      error.userMessage = "请求超时（30秒），请重试或检查网络";
+
+      // 重试超时请求 (GET 请求)
+      if (config && config.method === 'get') {
+        const retryCount = parseInt(config.headers?.['x-retry-count'] || 0);
+        if (retryCount < 3) {
+          config.headers['x-retry-count'] = retryCount + 1;
+          // 指数退避: 1s, 2s, 4s
+          const delay = Math.pow(2, retryCount) * 1000;
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          return api.request(config);
+        }
+      }
     } else if (error.request) {
       // 网络错误（无响应）
       error.isNetworkError = true;
-      error.userMessage = "网络连接失败，请检查网络";
+      error.userMessage = "网络连接失败，请检查网络后重试";
+
+      // 重试网络错误 (GET 请求)
+      if (config && config.method === 'get') {
+        const retryCount = parseInt(config.headers?.['x-retry-count'] || 0);
+        if (retryCount < 3) {
+          config.headers['x-retry-count'] = retryCount + 1;
+          const delay = Math.pow(2, retryCount) * 1000;
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          return api.request(config);
+        }
+      }
     } else {
       // 请求配置错误
       error.userMessage = "请求配置错误";

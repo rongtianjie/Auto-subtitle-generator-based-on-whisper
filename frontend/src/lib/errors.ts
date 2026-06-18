@@ -1,37 +1,93 @@
 /**
  * 从 axios 错误中提取用户友好的错误信息。
- * 优先使用后端返回的 detail 字段，否则按 HTTP 状态码和网络状况兜底。
+ * 支持新的标准错误格式和网络错误处理。
  */
 export function extractApiError(err: any, fallback: string): string {
-  // 无响应：网络断开或服务不可达
-  if (!err.response) {
-    if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
-      return '请求超时，请检查网络连接后重试';
+  // 使用标准化的 userMessage（来自拦截器）
+  if (err.userMessage) {
+    return err.userMessage;
+  }
+
+  // 新格式：标准错误响应
+  if (err.response) {
+    const data = err.response.data;
+    const status = err.response.status;
+
+    // 优先使用后端返回的 message 字段
+    if (data?.message && typeof data.message === 'string') {
+      return data.message;
     }
-    return '无法连接到服务器，请检查网络连接';
+
+    // 按状态码兜底
+    if (status === 401 || status === 403) {
+      return fallback;
+    }
+    if (status === 429) {
+      return '操作过于频繁，请稍后再试';
+    }
+    if (status >= 500) {
+      return '服务器内部错误，请稍后重试';
+    }
+    if (status === 400) {
+      return '请求参数有误，请检查输入';
+    }
   }
 
-  const status = err.response.status;
-  const detail = err.response.data?.detail;
-
-  // 服务端返回了具体错误信息（如"用户名或密码错误"、"账号已被禁用"）
-  if (detail && typeof detail === 'string') {
-    return detail;
+  // 超时错误
+  if (err.code === 'ECONNABORTED' || err.isTimeoutError) {
+    return '请求超时（30秒），请检查网络后重试';
   }
 
-  // 按状态码兜底
-  if (status === 401 || status === 403) {
-    return fallback;
-  }
-  if (status === 429) {
-    return '操作过于频繁，请稍后再试';
-  }
-  if (status >= 500) {
-    return '服务器内部错误，请稍后重试';
-  }
-  if (status === 400) {
-    return '请求参数有误，请检查输入';
+  // 网络错误
+  if (err.isNetworkError || !err.response) {
+    return '网络连接失败，请检查网络后重试';
   }
 
   return fallback;
 }
+
+/**
+ * 检查错误是否可重试
+ */
+export function isRetriableError(err: any): boolean {
+  // 网络错误和超时可重试
+  if (err.isNetworkError || err.isTimeoutError) {
+    return true;
+  }
+
+  // 5xx 服务器错误可重试
+  if (err.response?.status >= 500) {
+    return true;
+  }
+
+  // 429 Too Many Requests 可重试（但应该添加延迟）
+  if (err.response?.status === 429) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * 获取错误代码（用于分析和日志）
+ */
+export function getErrorCode(err: any): string {
+  if (err.errorCode) {
+    return err.errorCode;
+  }
+
+  if (err.response?.data?.error_code) {
+    return err.response.data.error_code;
+  }
+
+  if (err.response?.status) {
+    return `HTTP_${err.response.status}`;
+  }
+
+  if (err.code) {
+    return err.code;
+  }
+
+  return 'UNKNOWN_ERROR';
+}
+
