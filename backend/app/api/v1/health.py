@@ -8,6 +8,7 @@ from app.startup_checker.checks.ffmpeg_check import check_ffmpeg
 from app.startup_checker.checks.whisper_check import check_whisper_model
 from app.startup_checker.checks.llm_check import check_llm_connection
 from app.core.task_queue import task_queue
+from app.core.sse_manager import sse_manager
 
 router = APIRouter(prefix="/health", tags=["健康检查"])
 
@@ -40,3 +41,9 @@ async def asyncio_gather_checks():
         return_exceptions=True,
     )
     return [r for r in results if not isinstance(r, Exception)]
+
+
+@router.get("/sse-connections")
+async def sse_connections_status():
+    """获取 SSE 连接监控信息"""
+    return sse_manager.get_stats()

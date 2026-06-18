@@ -14,48 +14,124 @@ export function useSSE(taskId: string | null) {
   const [progress, setProgress] = useState<SSEProgress | null>(null);
   const [done, setDone] = useState(false);
   const [connected, setConnected] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
+  const reconnectAttemptsRef = useRef(0);
+  const lastActivityRef = useRef<number>(Date.now());
+  const heartbeatCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  const connect = (url: string) => {
+    try {
+      const es = new EventSource(url);
+      eventSourceRef.current = es;
+      reconnectAttemptsRef.current = 0;
+
+      es.onopen = () => {
+        setConnected(true);
+        setError(null);
+        lastActivityRef.current = Date.now();
+      };
+
+      es.addEventListener('progress', (event) => {
+        const data = JSON.parse(event.data);
+        setProgress(data);
+        lastActivityRef.current = Date.now();
+      });
+
+      es.addEventListener('keepalive', () => {
+        // 心跳包，仅用于保持连接
+        lastActivityRef.current = Date.now();
+      });
+
+      es.addEventListener('completed', (event) => {
+        const data = JSON.parse(event.data);
+        setProgress(data);
+        setDone(true);
+        setConnected(false);
+        es.close();
+      });
+
+      es.addEventListener('failed', (event) => {
+        const data = JSON.parse(event.data);
+        setProgress(data);
+        setDone(true);
+        setConnected(false);
+        es.close();
+      });
+
+      es.addEventListener('cancelled', (event) => {
+        const data = JSON.parse(event.data);
+        setProgress(data);
+        setDone(true);
+        setConnected(false);
+        es.close();
+      });
+
+      es.addEventListener('error', () => {
+        setConnected(false);
+        setError('连接已断开');
+        es.close();
+
+        // 自动重连（最多 3 次）
+        if (reconnectAttemptsRef.current < 3) {
+          reconnectAttemptsRef.current += 1;
+          const delay = Math.pow(2, reconnectAttemptsRef.current - 1) * 1000; // 指数退避: 1s, 2s, 4s
+          setTimeout(() => {
+            if (!done) {
+              connect(url);
+            }
+          }, delay);
+        } else {
+          setError('连接已断开，请刷新页面重试');
+          setDone(true);
+        }
+      });
+
+      // 启动心跳检测（15秒无数据则认为连接已死）
+      if (heartbeatCheckIntervalRef.current) {
+        clearInterval(heartbeatCheckIntervalRef.current);
+      }
+
+      heartbeatCheckIntervalRef.current = setInterval(() => {
+        const now = Date.now();
+        const idleTime = (now - lastActivityRef.current) / 1000;
+        if (idleTime > 15 && connected) {
+          setError('连接超时');
+          es.close();
+          setConnected(false);
+
+          // 尝试重连
+          if (reconnectAttemptsRef.current < 3) {
+            reconnectAttemptsRef.current += 1;
+            setTimeout(() => {
+              if (!done) {
+                connect(url);
+              }
+            }, 1000 * Math.pow(2, reconnectAttemptsRef.current - 1));
+          }
+        }
+      }, 5000); // 每 5 秒检查一次
+    } catch (err) {
+      setError('连接失败');
+      setConnected(false);
+    }
+  };
 
   useEffect(() => {
     if (!taskId) return;
 
     const url = taskApi.getStreamUrl(taskId);
-    const es = new EventSource(url);
-    eventSourceRef.current = es;
-
-    es.onopen = () => setConnected(true);
-
-    es.addEventListener('progress', (event) => {
-      const data = JSON.parse(event.data);
-      setProgress(data);
-    });
-
-    es.addEventListener('completed', () => {
-      setDone(true);
-      es.close();
-    });
-
-    es.addEventListener('failed', (event) => {
-      const data = JSON.parse(event.data);
-      setProgress(data);
-      setDone(true);
-      es.close();
-    });
-
-    es.addEventListener('cancelled', () => {
-      setDone(true);
-      es.close();
-    });
-
-    es.addEventListener('error', () => {
-      setConnected(false);
-      // 网络错误时不立即标记 done，允许轮询降级
-    });
+    connect(url);
 
     return () => {
-      es.close();
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+      }
+      if (heartbeatCheckIntervalRef.current) {
+        clearInterval(heartbeatCheckIntervalRef.current);
+      }
     };
-  }, [taskId]);
+  }, [taskId, done]);
 
-  return { progress, done, connected };
+  return { progress, done, connected, error };
 }

@@ -33,8 +33,7 @@ from app.core.exceptions import (
     ForbiddenException,
     TooManyRequestsException,
 )
-from app.core.validators import validate_upload
-from app.core.rate_limiter import upload_rate_limiter
+from app.core.sse_manager import sse_manager
 
 router = APIRouter(prefix="/tasks", tags=["任务"])
 
@@ -315,31 +314,87 @@ async def download_task_output(
 
 @router.get("/{task_id}/stream")
 async def stream_task_progress(task_id: UUID):
-    """SSE 实时进度推送（每次轮询使用独立数据库会话，避免会话缓存导致进度数据不更新）"""
-    from app.database import async_session_factory
+    """SSE 实时进度推送
+
+    使用独立的数据库会话，避免会话缓存导致进度数据不更新
+
+    连接管理:
+    - 30 秒无数据则认为连接已死亡并关闭
+    - 每 10 秒发送心跳包 (keepalive event)
+    - 自动清理超时的连接
+    """
+    import uuid as uuid_module
+    from app.core.sse_manager import sse_manager
+
+    connection_id = str(uuid_module.uuid4())
+    sse_manager.register(connection_id, str(task_id))
+    last_heartbeat = time.time()
+    heartbeat_interval = 10  # 每 10 秒发送一次心跳
 
     async def event_generator():
-        while True:
-            async with async_session_factory() as fresh_db:
-                task = await task_service.get_task(fresh_db, task_id)
-                if not task:
-                    yield {"event": "error", "data": json.dumps({"message": "任务不存在"})}
+        try:
+            while True:
+                # 检查是否需要清理空闲连接
+                if sse_manager.should_cleanup():
+                    cleaned = sse_manager.cleanup_idle()
+                    if cleaned > 0:
+                        logger.debug(f"Cleaned {cleaned} idle SSE connections")
+                    sse_manager.mark_cleanup()
+
+                try:
+                    async with async_session_factory() as fresh_db:
+                        task = await task_service.get_task(fresh_db, task_id)
+                        if not task:
+                            yield {
+                                "event": "error",
+                                "data": json.dumps({"message": "任务不存在"}),
+                            }
+                            break
+
+                        # 更新连接活动时间
+                        sse_manager.update_activity(connection_id)
+
+                        # 发送进度数据
+                        data = {
+                            "status": task.status,
+                            "progress": task.progress,
+                            "message": task.progress_message,
+                            "error_message": task.error_message,
+                            "queue_position": task.queue_position,
+                            "estimated_seconds": task.estimated_seconds,
+                        }
+                        yield {"event": "progress", "data": json.dumps(data)}
+
+                        # 如果任务完成，发送完成事件并关闭
+                        if task.status in ("completed", "failed", "cancelled"):
+                            yield {"event": task.status, "data": json.dumps(data)}
+                            break
+                except Exception as e:
+                    logger.error(f"Error fetching task progress: {e}")
+                    yield {
+                        "event": "error",
+                        "data": json.dumps({"message": "获取进度时出错"}),
+                    }
                     break
 
-                data = {
-                    "status": task.status,
-                    "progress": task.progress,
-                    "message": task.progress_message,
-                    "error_message": task.error_message,
-                    "queue_position": task.queue_position,
-                    "estimated_seconds": task.estimated_seconds,
-                }
-                yield {"event": "progress", "data": json.dumps(data)}
+                # 发送心跳包，保持连接活跃
+                now = time.time()
+                nonlocal last_heartbeat
+                if now - last_heartbeat > heartbeat_interval:
+                    yield {
+                        "event": "keepalive",
+                        "data": json.dumps({"timestamp": now}),
+                    }
+                    last_heartbeat = now
 
-                if task.status in ("completed", "failed", "cancelled"):
-                    yield {"event": task.status, "data": json.dumps(data)}
-                    break
+                await asyncio.sleep(2)
 
-            await asyncio.sleep(2)
+        except asyncio.CancelledError:
+            logger.debug(f"SSE stream cancelled for task {task_id}")
+        except GeneratorExit:
+            logger.debug(f"SSE stream closed for task {task_id}")
+        finally:
+            # 确保连接被注销
+            sse_manager.unregister(connection_id)
 
     return EventSourceResponse(event_generator())
