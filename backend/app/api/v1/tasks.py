@@ -31,7 +31,10 @@ from app.core.exceptions import (
     QuotaExceededException,
     OperationNotAllowedException,
     ForbiddenException,
+    TooManyRequestsException,
 )
+from app.core.validators import validate_upload
+from app.core.rate_limiter import upload_rate_limiter
 
 router = APIRouter(prefix="/tasks", tags=["任务"])
 
@@ -98,6 +101,24 @@ async def create_task(
         if not file:
             raise ValidationException(message="上传模式需要提供文件")
 
+        # 获取客户端 IP 用于速率限制
+        forwarded = request.headers.get("X-Forwarded-For")
+        if forwarded:
+            client_ip = forwarded.split(",")[0].strip()
+        else:
+            client_ip = request.client.host
+
+        # 检查上传频率限制
+        allowed, remaining = upload_rate_limiter.is_allowed(f"upload:{client_ip}")
+        if not allowed:
+            raise TooManyRequestsException(
+                message="上传过于频繁，请稍后再试",
+                retry_after=60
+            )
+
+        # 验证文件（清理文件名、验证 MIME 类型）
+        validated_filename = validate_upload(file.filename, file.content_type)
+
         # 校验文件大小
         max_file_size_mb = await get_config_value(db, "max_file_size_mb", settings.MAX_FILE_SIZE_MB)
         max_size_bytes = max_file_size_mb * 1024 * 1024
@@ -116,9 +137,9 @@ async def create_task(
 
         # 流式写入，避免将整个文件加载到内存
         temp_id = uuid.uuid4()
-        file_path = storage.save_upload_stream(temp_id, file.filename, file.file)
-        source_filename = file.filename
-        title = title or file.filename
+        file_path = storage.save_upload_stream(temp_id, validated_filename, file.file)
+        source_filename = validated_filename
+        title = title or validated_filename
 
     # --- 游客任务次数限制校验 ---
     if current_user is None:
