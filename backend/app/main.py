@@ -1,4 +1,3 @@
-import asyncio
 import time
 from contextlib import asynccontextmanager
 
@@ -23,7 +22,8 @@ from app.startup_checker.checks.db_check import check_database
 from app.startup_checker.checks.ffmpeg_check import check_ffmpeg
 from app.startup_checker.checks.whisper_check import check_whisper_model
 from app.startup_checker.checks.llm_check import check_llm_connection
-from app.services.config_service import init_default_configs, get_config_value
+from app.services.config_service import init_default_configs
+from app.startup.bootstrap import ensure_whisper_model_available, resolve_default_llm_model
 
 # 注册检查项
 checker.register("数据库连接 (PostgreSQL)", check_database)
@@ -86,10 +86,15 @@ async def lifespan(app: FastAPI):
     try:
         async with async_session_factory() as db:
             await init_default_configs(db)
-            # 从数据库加载 LLM 模型名，覆盖 settings 中的空值
-            db_llm_model = await get_config_value(db, "llm_model")
-            if db_llm_model:
-                settings.LLM_MODEL = db_llm_model
+            try:
+                await ensure_whisper_model_available("tiny")
+            except Exception as e:
+                logger.warning(f"自动下载 tiny 模型失败: {e}")
+
+            try:
+                await resolve_default_llm_model(db)
+            except Exception as e:
+                logger.warning(f"自动选择默认 LLM 模型失败: {e}")
     except Exception as e:
         logger.warning(f"初始化默认配置失败: {e}")
 

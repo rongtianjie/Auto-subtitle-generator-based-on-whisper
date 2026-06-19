@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { taskApi } from '@/lib/api';
 import type { Task } from '@/types';
 
@@ -13,41 +13,46 @@ export function useTaskForm() {
   const [translateEnabled, setTranslateEnabled] = useState(true);
   const [isDragging, setIsDragging] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [validationError, setValidationError] = useState<string | null>(null);
+  const [validationError, setValidationError] = useState<string | undefined>(undefined);
 
-  const isValid = useCallback(() => {
-    setValidationError(null);
-
+  const getValidationError = useCallback((): string | undefined => {
     if (sourceType === 'upload' && !file) {
-      setValidationError('请选择要上传的文件');
-      return false;
+      return '请选择要上传的文件';
     }
 
     if (sourceType === 'url' && !url.trim()) {
-      setValidationError('请输入视频链接');
-      return false;
+      return '请输入视频链接';
     }
 
     if (!model) {
-      setValidationError('请选择 Whisper 模型');
-      return false;
+      return '请选择 Whisper 模型';
     }
 
     if (formats.length === 0) {
-      setValidationError('请选择至少一个输出格式');
-      return false;
+      return '请选择至少一个输出格式';
     }
 
     if (translateEnabled && langs.length === 0) {
-      setValidationError('请选择至少一个翻译语言');
-      return false;
+      return '请选择至少一个翻译语言';
     }
 
-    return true;
+    return undefined;
   }, [sourceType, file, url, model, formats, translateEnabled, langs]);
 
+  const isValid = useCallback((): boolean => {
+    return getValidationError() === undefined;
+  }, [getValidationError]);
+
+  useEffect(() => {
+    if (!validationError) return;
+    setValidationError(getValidationError());
+  }, [validationError, getValidationError]);
+
   const submitTask = useCallback(async (): Promise<Task | null> => {
-    if (!isValid()) {
+    const nextValidationError = getValidationError();
+    setValidationError(nextValidationError);
+
+    if (nextValidationError) {
       return null;
     }
 
@@ -55,7 +60,7 @@ export function useTaskForm() {
     try {
       const formData = new FormData();
       formData.append('source_type', sourceType);
-      formData.append('title', title || (sourceType === 'upload' ? file?.name : 'URL 视频'));
+      formData.append('title', title || (sourceType === 'upload' && file ? file.name : 'URL 视频') || '');
       formData.append('whisper_model', model);
       formData.append('output_formats', JSON.stringify(formats));
 
@@ -77,7 +82,7 @@ export function useTaskForm() {
       setTitle('');
       setFormats(['txt', 'srt', 'vtt']);
       setLangs(['zh']);
-      setValidationError(null);
+      setValidationError(undefined);
 
       return response.data;
     } catch (error: any) {
@@ -87,7 +92,7 @@ export function useTaskForm() {
     } finally {
       setIsSubmitting(false);
     }
-  }, [isValid, sourceType, file, url, title, model, formats, langs, translateEnabled]);
+  }, [getValidationError, sourceType, file, url, title, model, formats, langs, translateEnabled]);
 
   return {
     sourceType,
