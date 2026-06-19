@@ -9,6 +9,8 @@ from loguru import logger
 
 from app.config import settings
 from app.core.logging import setup_logging
+from app.core.structured_logging import logger as struct_logger, perf_logger, audit_logger
+from app.core.logging_middleware import LoggingMiddleware, ContextLoggingMiddleware
 from app.core.exceptions import AppException
 from app.core.exception_handlers import (
     app_exception_handler,
@@ -125,8 +127,11 @@ app.add_middleware(
     allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"],
+    allow_headers=["*", "X-Request-ID"],
 )
+
+# 添加日志中间件（记录请求/响应和性能指标）
+app.add_middleware(LoggingMiddleware)
 
 # 异常处理器
 app.add_exception_handler(AppException, app_exception_handler)
@@ -134,12 +139,15 @@ app.add_exception_handler(RequestValidationError, validation_exception_handler)
 app.add_exception_handler(Exception, general_exception_handler)
 
 # 注册路由
-from app.api.v1 import auth, tasks, health, admin, files, models
+from app.api.v1 import auth, tasks, health, admin, files, models, logs
 
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(tasks.router, prefix="/api/v1")
 app.include_router(health.router, prefix="/api/v1")
 app.include_router(files.router, prefix="/api/v1")
+app.include_router(admin.router, prefix="/api/v1")
+app.include_router(models.router, prefix="/api/v1")
+app.include_router(logs.router, prefix="/api/v1")
 app.include_router(admin.router, prefix="/api/v1")
 app.include_router(models.router, prefix="/api/v1")
 
