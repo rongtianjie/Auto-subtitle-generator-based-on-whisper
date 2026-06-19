@@ -1,6 +1,64 @@
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, validator
 from typing import List, Optional
 from uuid import UUID
+
+
+class TaskCreateRequest(BaseModel):
+    """创建任务请求 schema (表单提交)"""
+
+    source_type: str = Field(..., pattern="^(upload|url)$", description="数据来源: upload 或 url")
+    source_url: Optional[str] = Field(None, description="视频 URL (source_type=url 时必需)")
+    title: Optional[str] = Field(None, max_length=255, description="任务标题")
+    whisper_model: str = Field(
+        "base",
+        pattern="^(tiny|base|small|medium|large)$",
+        description="Whisper 模型"
+    )
+    output_formats: List[str] = Field(
+        ["txt", "srt", "vtt"],
+        description="输出格式列表"
+    )
+    translate_target_langs: Optional[List[str]] = Field(
+        None,
+        description="翻译目标语言列表"
+    )
+
+    @validator("output_formats")
+    def validate_output_formats(cls, v):
+        """验证输出格式"""
+        if not v:
+            raise ValueError("至少需要选择一个输出格式")
+
+        allowed = {"txt", "srt", "vtt"}
+        invalid = set(v) - allowed
+        if invalid:
+            raise ValueError(f"不支持的输出格式: {invalid}")
+
+        return v
+
+    @validator("translate_target_langs", pre=True, always=True)
+    def validate_languages(cls, v):
+        """验证翻译语言"""
+        if not v:
+            return None
+
+        # 这里可以配置支持的语言列表
+        supported = {
+            "zh", "en", "ja", "ko", "fr", "de", "es", "ru", "pt", "ar", "th", "vi",
+            "it", "nl", "pl", "tr", "id"
+        }
+        invalid = set(v) - supported
+        if invalid:
+            raise ValueError(f"不支持的语言代码: {invalid}")
+
+        return v
+
+    @validator("source_url")
+    def validate_source_url(cls, v, values):
+        """验证 source_url (当 source_type=url 时)"""
+        if values.get("source_type") == "url" and not v:
+            raise ValueError("source_type=url 时必须提供 source_url")
+        return v
 
 
 class TaskCreate(BaseModel):
