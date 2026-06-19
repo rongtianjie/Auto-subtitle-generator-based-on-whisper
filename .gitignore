@@ -44,6 +44,7 @@ dmypy.json
 
 # IDE
 .vscode/
+.claude/
 .idea/
 *.swp
 *.swo
