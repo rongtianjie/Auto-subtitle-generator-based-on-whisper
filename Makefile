@@ -1,11 +1,10 @@
-.PHONY: help install dev test lint format clean docker docker-up docker-down
+.PHONY: help install test lint format clean docker docker-up docker-down
 
 help:
 	@echo "SubWeaver 项目命令"
 	@echo ""
 	@echo "开发命令:"
 	@echo "  make install      - 安装开发依赖"
-	@echo "  make dev          - 启动本地开发环境"
 	@echo "  make test         - 运行所有测试"
 	@echo "  make test-unit    - 运行单元测试"
 	@echo "  make test-int     - 运行集成测试"
@@ -32,23 +31,9 @@ help:
 
 # 安装
 install:
-	cd backend && pip install -e ".[dev]"
+	cd backend && uv sync --extra dev
 	cd frontend && npm install
 	pre-commit install
-
-# 开发
-dev:
-	@echo "启动开发环境... (推荐使用 docker compose)"
-	@echo "运行: docker compose up -d"
-
-dev-local:
-	@echo "启动本地开发服务..."
-	@echo "后端服务启动在 http://localhost:8000"
-	@echo "前端服务启动在 http://localhost:5173"
-	@echo "请在另外的终端窗口运行:"
-	@echo "  cd backend && python -m uvicorn app.main:app --reload --port 8000"
-	@echo "  cd frontend && npm run dev"
-	@echo "  cd backend && uv run python run_worker.py"
 
 # 测试
 test:
@@ -71,6 +56,7 @@ test-cov:
 lint:
 	cd backend && flake8 app tests
 	cd backend && mypy app
+	cd frontend && npm run lint
 
 format:
 	cd backend && black app tests
@@ -88,9 +74,6 @@ security:
 
 type-check:
 	cd backend && mypy app
-
-pre-commit-run:
-	pre-commit run --all-files
 
 # Docker
 docker:
@@ -165,7 +148,3 @@ clean:
 	find . -type d -name "htmlcov" -exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name "dist" -exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name "build" -exec rm -rf {} + 2>/dev/null || true
-
-# 快速检查 (用于 CI/CD)
-ci: lint format-check test
-	@echo "所有检查通过 ✓"
