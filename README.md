@@ -248,8 +248,7 @@ uv run pytest --cov=app --cov-report=html
 │   │   ├── worker/          # Background task worker
 │   │   └── startup_checker/ # System health checks
 │   ├── tests/               # Test suite
-│   ├── alembic/             # Database migrations
-│   └── docker-entrypoint.sh # Docker container entrypoint
+│   └── alembic/             # Database migrations
 ├── frontend/
 │   ├── src/
 │   │   ├── components/      # UI components
@@ -258,6 +257,11 @@ uv run pytest --cov=app --cov-report=html
 │   │   ├── lib/             # Utilities and API client
 │   │   └── types/           # TypeScript types
 │   └── public/              # Static assets
+├── docker/                  # Docker build assets
+│   ├── Dockerfile.backend   # Backend/worker image definition
+│   ├── Dockerfile.frontend  # Frontend image definition
+│   └── backend-entrypoint.sh # Backend runtime entrypoint
+├── docs/                    # Project documentation
 ├── storage/                 # File storage (uploads, outputs, logs)
 ├── docker-compose.yml       # Production deployment
 ├── docker-compose.dev.yml   # Development database

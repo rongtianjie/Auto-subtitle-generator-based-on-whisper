@@ -222,8 +222,8 @@ jobs:
       
       - name: Build Docker images
         run: |
-          docker build -f Dockerfile.backend -t subweaver-backend:${{ github.sha }} .
-          docker build -f Dockerfile.frontend -t subweaver-frontend:${{ github.sha }} .
+          docker build -f docker/Dockerfile.backend -t subweaver-backend:${{ github.sha }} .
+          docker build -f docker/Dockerfile.frontend -t subweaver-frontend:${{ github.sha }} .
       
       - name: Push to registry
         env:

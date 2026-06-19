@@ -18,11 +18,11 @@ RUN pip install --no-cache-dir -e .
 
 # 复制应用代码
 COPY backend/ .
-COPY backend/docker-entrypoint.sh /app/docker-entrypoint.sh
+COPY docker/backend-entrypoint.sh /usr/local/bin/backend-entrypoint.sh
 
 # 创建日志和存储目录
 RUN mkdir -p storage/logs storage/uploads storage/outputs \
-    && chmod +x /app/docker-entrypoint.sh
+    && chmod +x /usr/local/bin/backend-entrypoint.sh
 
 # 暴露端口
 EXPOSE 8000
@@ -31,4 +31,4 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
     CMD python -c "import requests; requests.get('http://127.0.0.1:8000/api/v1/health', timeout=5)" || exit 1
 
-ENTRYPOINT ["bash", "/app/docker-entrypoint.sh"]
+ENTRYPOINT ["bash", "/usr/local/bin/backend-entrypoint.sh"]

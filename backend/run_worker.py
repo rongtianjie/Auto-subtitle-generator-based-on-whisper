@@ -19,6 +19,7 @@ from app.startup_checker.checks.db_check import check_database
 from app.startup_checker.checks.ffmpeg_check import check_ffmpeg
 from app.startup_checker.checks.whisper_check import check_whisper_model
 from app.startup_checker.checks.llm_check import check_llm_connection
+from app.startup.bootstrap import ensure_whisper_model_available
 from app.config import settings
 
 # 预导入所有 ORM 模型，确保 SQLAlchemy 关系映射可以正确解析
@@ -47,6 +48,11 @@ async def main():
                 settings.LLM_MODEL = db_llm_model
     except Exception as e:
         logger.warning(f"初始化默认配置失败: {e}")
+
+    try:
+        await ensure_whisper_model_available("tiny")
+    except Exception as e:
+        logger.warning(f"自动准备 Whisper 模型失败: {e}")
 
     # 注册并运行启动检查
     checker.register("数据库连接 (PostgreSQL)", check_database)

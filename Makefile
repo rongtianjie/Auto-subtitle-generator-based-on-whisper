@@ -18,7 +18,7 @@ help:
 	@echo ""
 	@echo "Docker 命令:"
 	@echo "  make docker       - 构建 Docker 镜像"
-	@echo "  make docker-up    - 启动容器 (docker-compose)"
+	@echo "  make docker-up    - 启动容器 (docker compose)"
 	@echo "  make docker-down  - 停止容器"
 	@echo "  make docker-logs  - 查看容器日志"
 	@echo ""
@@ -38,8 +38,8 @@ install:
 
 # 开发
 dev:
-	@echo "启动开发环境... (使用 docker-compose 推荐)"
-	@echo "运行: docker-compose up -d"
+	@echo "启动开发环境... (推荐使用 docker compose)"
+	@echo "运行: docker compose up -d"
 
 dev-local:
 	@echo "启动本地开发服务..."
@@ -48,7 +48,7 @@ dev-local:
 	@echo "请在另外的终端窗口运行:"
 	@echo "  cd backend && python -m uvicorn app.main:app --reload --port 8000"
 	@echo "  cd frontend && npm run dev"
-	@echo "  python -m app.worker.worker"
+	@echo "  cd backend && uv run python run_worker.py"
 
 # 测试
 test:
@@ -94,11 +94,11 @@ pre-commit-run:
 
 # Docker
 docker:
-	docker build -f Dockerfile.backend -t subweaver-backend:latest .
-	docker build -f Dockerfile.frontend -t subweaver-frontend:latest .
+	docker build -f docker/Dockerfile.backend -t subweaver-backend:latest .
+	docker build -f docker/Dockerfile.frontend -t subweaver-frontend:latest .
 
 docker-up:
-	docker-compose up -d
+	docker compose up -d
 	@echo "容器已启动"
 	@echo "前端: http://localhost:3000"
 	@echo "API: http://localhost:8000"
@@ -106,16 +106,16 @@ docker-up:
 	@echo "Grafana: http://localhost:3001"
 
 docker-down:
-	docker-compose down
+	docker compose down
 
 docker-logs:
-	docker-compose logs -f
+	docker compose logs -f
 
 docker-logs-backend:
-	docker-compose logs -f backend
+	docker compose logs -f backend
 
 docker-logs-worker:
-	docker-compose logs -f worker
+	docker compose logs -f worker
 
 # 数据库
 db-migrate:

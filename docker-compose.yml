@@ -44,7 +44,7 @@ services:
   backend:
     build:
       context: .
-      dockerfile: Dockerfile.backend
+      dockerfile: docker/Dockerfile.backend
     container_name: subweaver-backend
     depends_on:
       postgres:
@@ -69,6 +69,7 @@ services:
     volumes:
       - ./backend:/app
       - backend_storage:/app/storage
+      - whisper_models:/models
     healthcheck:
       test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/api/v1/health', timeout=5)"]
       interval: 30s
@@ -83,7 +84,7 @@ services:
   worker:
     build:
       context: .
-      dockerfile: Dockerfile.backend
+      dockerfile: docker/Dockerfile.backend
     container_name: subweaver-worker
     depends_on:
       postgres:
@@ -104,10 +105,13 @@ services:
     volumes:
       - ./backend:/app
       - backend_storage:/app/storage
+      - whisper_models:/models
     networks:
       - subweaver-network
     restart: unless-stopped
-    command: python -m app.worker.worker
+    command: python run_worker.py
+    healthcheck:
+      disable: true
     profiles:
       - full
 
@@ -115,7 +119,7 @@ services:
   frontend:
     build:
       context: .
-      dockerfile: frontend/Dockerfile
+      dockerfile: docker/Dockerfile.frontend
     container_name: subweaver-frontend
     depends_on:
       - backend
@@ -186,6 +190,8 @@ volumes:
   redis_data:
     driver: local
   backend_storage:
+    driver: local
+  whisper_models:
     driver: local
   prometheus_data:
     driver: local

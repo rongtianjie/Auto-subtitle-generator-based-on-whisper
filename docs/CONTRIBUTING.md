@@ -69,7 +69,7 @@ uv run python -m uvicorn app.main:app --reload --port 8000
 Worker（另一个终端）：
 ```bash
 cd backend
-uv run python -m app.worker.worker
+uv run python run_worker.py
 ```
 
 前端已在 `npm run dev` 中运行在 http://localhost:5173
@@ -457,7 +457,7 @@ with task_duration.time():
 
 ## 获取帮助
 
-- **文档**：[README.md](README.md), [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)
+- **文档**：[README.md](../README.md), [部署指南](DEPLOYMENT_GUIDE.md), [开发指南](DEVELOPMENT.md)
 - **讨论**：GitHub Discussions
 - **问题**：GitHub Issues
 - **联系**：[维护者邮箱]

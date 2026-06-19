@@ -52,4 +52,4 @@ src/
 
 ## Docker
 
-The frontend is served via Nginx in production. See the root `Dockerfile` for build details.
+The frontend is served via Nginx in production. See `docker/Dockerfile.frontend` for build details.

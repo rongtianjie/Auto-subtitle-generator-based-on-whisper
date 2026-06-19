@@ -34,7 +34,7 @@ npm run dev
 
 # 终端 3: Worker
 cd backend
-uv run python -m app.worker.worker
+uv run python run_worker.py
 ```
 
 ## 开发工作流
@@ -180,7 +180,7 @@ async def test_update_task(api_client, sample_task):
 
 5. **更新文档**：
 
-在 API_DOCUMENTATION.md 中添加端点文档。
+在 `docs/API_DOCUMENTATION.md` 中添加端点文档。
 
 ### 添加数据库迁移
 

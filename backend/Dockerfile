@@ -23,10 +23,6 @@ COPY . .
 # 创建存储目录
 RUN mkdir -p /app/storage/uploads /app/storage/outputs /app/storage/logs /app/models
 
-# entrypoint 脚本
-COPY docker-entrypoint.sh /docker-entrypoint.sh
-RUN chmod +x /docker-entrypoint.sh
-
 EXPOSE 8000
 
-ENTRYPOINT ["/docker-entrypoint.sh"]
+CMD ["bash", "-lc", "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"]

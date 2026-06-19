@@ -7,7 +7,7 @@ Make the repository root easier to scan by moving long-form documentation into `
 ## Scope
 
 - Move current top-level docs into `docs/`
-- Move `Dockerfile.backend`, `Dockerfile.frontend`, and `docker-entrypoint.sh` into `docker/`
+- Move the active Docker build files into `docker/`
 - Keep `docker-compose.yml` in the repository root
 - Update all references to moved files in Compose config, Makefile, and active documentation
 - Preserve the current user-facing workflow:
@@ -41,14 +41,14 @@ Make the repository root easier to scan by moving long-form documentation into `
 
 - `Dockerfile.backend` -> `docker/Dockerfile.backend`
 - `Dockerfile.frontend` -> `docker/Dockerfile.frontend`
-- `docker-entrypoint.sh` -> `docker/docker-entrypoint.sh`
+- `backend/docker-entrypoint.sh` -> `docker/backend-entrypoint.sh`
 
 ## Command Compatibility
 
 The main command surface should not change.
 
 - `docker-compose.yml` will reference `docker/Dockerfile.backend` and `docker/Dockerfile.frontend`
-- backend image build steps will copy `docker/docker-entrypoint.sh`
+- backend image build steps will copy `docker/backend-entrypoint.sh`
 - `Makefile` Docker targets will use the new file paths
 - docs examples will still tell users to run commands from the repo root
 
