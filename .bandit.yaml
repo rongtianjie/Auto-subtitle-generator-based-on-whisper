@@ -1,0 +1,58 @@
+# Bandit 安全检查配置
+assert_used:
+  skips: ['*/tests/*']
+
+flask_debug_true:
+  level: MEDIUM
+
+hardcoded_password_string:
+  level: MEDIUM
+
+hardcoded_sql_string:
+  level: MEDIUM
+
+request_with_no_cert_validation:
+  level: HIGH
+
+try_except_pass:
+  level: LOW
+
+exclude_dirs:
+  - '/tests/'
+  - '*/test*.py'
+
+tests:
+  - assert_used
+  - blacklist_calls
+  - blacklist_import_func
+  - blacklist_imports
+  - exec_used
+  - flask_debug_true
+  - hardcoded_bind_all_interfaces
+  - hardcoded_password_string
+  - hardcoded_sql_string
+  - hardcoded_tmp_directory
+  - insecure_hash_functions
+  - insecure_random_func
+  - jinja2_autoescape_false
+  - mako_templates
+  - password_config_option_not_secret
+  - request_with_no_cert_validation
+  - set_bad_file_permissions
+  - start_process_with_a_shell
+  - start_process_with_no_shell
+  - statement_has_global_scope
+  - suspicious_eval_use
+  - suspicious_mark_safe_usage
+  - suspicious_requests_use
+  - suspicious_sqlalchemy_query_use
+  - try_except_pass
+  - try_except_requests
+  - unsafe_yaml_load
+  - use_of_assert_detected
+  - use_of_exec
+  - use_of_input
+  - use_of_insecure_hash_functions
+  - use_of_insecure_random_func
+  - use_of_pickle
+  - weakref_objects

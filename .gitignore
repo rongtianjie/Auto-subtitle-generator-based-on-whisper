@@ -1,35 +1,92 @@
-# Dependencies
-node_modules/
-__pycache__/
-*.pyc
-.venv/
-venv/
-
-# Environment
+# 环境变量文件
 .env
-backend/.env
+.env.local
+.env.*.local
 
-# Storage & Models (managed by Docker volumes)
-backend/storage/
-backend/models/
+# 虚拟环境
+venv/
+env/
+ENV/
+.venv
+
+# Python 相关
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# 测试和覆盖率
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.hypothesis/
+.mypy_cache/
+.dmypy.json
+dmypy.json
 
 # IDE
-.idea/
 .vscode/
+.idea/
 *.swp
 *.swo
+*~
+.DS_Store
+*.sublime-project
+*.sublime-workspace
 
-# OS
+# Node.js
+node_modules/
+npm-debug.log
+yarn-error.log
+.npm
+
+# 构建输出
+dist/
+build/
+
+# 数据库和存储
+*.db
+*.sqlite
+*.sqlite3
+storage/uploads/*
+storage/outputs/*
+storage/logs/*
+!storage/.gitkeep
+
+# Docker
+.docker/
+
+# 日志文件
+*.log
+logs/
+
+# 操作系统
 .DS_Store
 Thumbs.db
 
-# Build
-dist/
-build/
-*.egg-info/
+# 临时文件
+*.tmp
+*.temp
+.cache/
 
-# Test
-.pytest_cache/
-htmlcov/
-.coverage*
-*.mp4
+# 本地开发
+local_settings.py
+.env.development.local
