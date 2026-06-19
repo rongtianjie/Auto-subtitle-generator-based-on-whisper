@@ -62,7 +62,16 @@ class Task(Base):
     outputs = relationship("TaskOutput", back_populates="task", cascade="all, delete-orphan")
 
     __table_args__ = (
+        # 队列查询优化：status + queue_position 复合索引（快速查找待处理任务）
         Index("idx_tasks_status_position", "status", "queue_position"),
+        # 用户任务列表查询优化：user_id + created_at
         Index("idx_tasks_user_created", "user_id", "created_at"),
+        # 创建时间索引（用于按时间排序和过期清理）
         Index("idx_tasks_created_at", "created_at"),
+        # 游客任务统计优化：client_ip + created_at（用于游客日限制检查）
+        Index("idx_tasks_client_ip_created", "client_ip", "created_at"),
+        # 任务完成时间查询优化（用于分析和报表）
+        Index("idx_tasks_completed_at", "completed_at"),
+        # 状态 + created_at 复合索引（用于按状态过滤列表）
+        Index("idx_tasks_status_created", "status", "created_at"),
     )

@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import String, Text, BigInteger, DateTime, ForeignKey, func
+from sqlalchemy import String, Text, BigInteger, DateTime, ForeignKey, func, Index
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -23,3 +23,9 @@ class TaskOutput(Base):
 
     # 关系
     task = relationship("Task", back_populates="outputs")
+
+    __table_args__ = (
+        Index("idx_task_outputs_task_id", "task_id"),
+        Index("idx_task_outputs_format_type", "format_type"),
+        Index("idx_task_outputs_language_pair", "language_pair"),
+    )

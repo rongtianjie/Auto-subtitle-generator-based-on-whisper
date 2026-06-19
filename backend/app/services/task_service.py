@@ -4,6 +4,7 @@ from datetime import datetime
 
 from sqlalchemy import select, func, desc
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload, joinedload
 
 from app.models.task import Task
 from app.models.task_output import TaskOutput
@@ -68,8 +69,12 @@ class TaskQueryService:
 
     @staticmethod
     async def get_by_id(db: AsyncSession, task_id: UUID) -> Task | None:
-        """获取单个任务"""
-        result = await db.execute(select(Task).where(Task.id == task_id))
+        """获取单个任务（含关联对象）"""
+        result = await db.execute(
+            select(Task)
+            .where(Task.id == task_id)
+            .options(selectinload(Task.outputs))  # 预加载输出文件，避免 N+1 查询
+        )
         return result.scalar_one_or_none()
 
     @staticmethod
@@ -80,7 +85,7 @@ class TaskQueryService:
         page_size: int = 20,
         status: str | None = None,
     ) -> tuple[list[Task], int]:
-        """获取用户的任务列表"""
+        """获取用户的任务列表（优化的 offset/limit）"""
         query = select(Task).where(Task.user_id == user_id)
         count_query = select(func.count(Task.id)).where(Task.user_id == user_id)
 
@@ -88,25 +93,30 @@ class TaskQueryService:
             query = query.where(Task.status == status)
             count_query = count_query.where(Task.status == status)
 
+        # 利用 idx_tasks_user_created 索引，快速排序和分页
         total = await db.scalar(count_query) or 0
         result = await db.execute(
-            query.order_by(desc(Task.created_at))
+            query
+            .order_by(desc(Task.created_at))
             .offset((page - 1) * page_size)
             .limit(page_size)
+            .options(selectinload(Task.outputs))  # 预加载输出
         )
         return list(result.scalars().all()), total
 
     @staticmethod
     async def get_outputs(db: AsyncSession, task_id: UUID) -> list[TaskOutput]:
-        """获取任务的输出文件"""
+        """获取任务的输出文件（利用 idx_task_outputs_task_id 索引）"""
         result = await db.execute(
-            select(TaskOutput).where(TaskOutput.task_id == task_id)
+            select(TaskOutput)
+            .where(TaskOutput.task_id == task_id)
+            .order_by(TaskOutput.created_at)  # 按创建时间排序
         )
         return list(result.scalars().all())
 
     @staticmethod
     async def count_guest_tasks_today(db: AsyncSession, client_ip: str) -> int:
-        """查询游客今日任务数"""
+        """查询游客今日任务数（利用 idx_tasks_client_ip_created 索引）"""
         result = await db.execute(
             select(func.count(Task.id)).where(
                 Task.client_ip == client_ip,
@@ -114,6 +124,21 @@ class TaskQueryService:
             )
         )
         return result.scalar() or 0
+
+    @staticmethod
+    async def get_by_status(
+        db: AsyncSession,
+        status: str,
+        limit: int = 100,
+    ) -> list[Task]:
+        """按状态获取任务列表（用于 Worker 队列查询，利用 idx_tasks_status_position 索引）"""
+        result = await db.execute(
+            select(Task)
+            .where(Task.status == status)
+            .order_by(Task.queue_position)  # 队列优先级
+            .limit(limit)
+        )
+        return list(result.scalars().all())
 
 
 class TaskMutationService:
