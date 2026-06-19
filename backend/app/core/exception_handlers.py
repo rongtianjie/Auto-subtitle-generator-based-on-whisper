@@ -7,8 +7,9 @@
 from fastapi import Request, status
 from fastapi.responses import JSONResponse
 from loguru import logger
+from datetime import datetime, timezone
 
-from app.core.exceptions import AppException, ErrorResponse, InternalException
+from app.core.exceptions import AppException, ErrorResponse, InternalException, ErrorCode
 
 
 async def app_exception_handler(request: Request, exc: AppException) -> JSONResponse:
@@ -39,7 +40,7 @@ async def app_exception_handler(request: Request, exc: AppException) -> JSONResp
 
     return JSONResponse(
         status_code=exc.status_code,
-        content=error_response.dict(exclude_none=True),
+        content=error_response.model_dump(exclude_none=True),
     )
 
 
@@ -60,14 +61,15 @@ async def general_exception_handler(request: Request, exc: Exception) -> JSONRes
 
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content=error_response.dict(exclude_none=True),
+        content=error_response.model_dump(exclude_none=True),
     )
 
 
 async def validation_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """处理 Pydantic 验证异常"""
     logger.warning(
-        f"Validation error: {exc}",
+        "Validation error: {}",
+        exc,
         extra={
             "path": request.url.path,
             "method": request.method,
@@ -85,13 +87,13 @@ async def validation_exception_handler(request: Request, exc: Exception) -> JSON
             })
 
     error_response = ErrorResponse(
-        error_code="INVALID_REQUEST",
+        error_code=ErrorCode.INVALID_REQUEST.value,
         message="Validation failed",
-        timestamp=__import__("datetime").datetime.utcnow().isoformat() + "Z",
+        timestamp=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         details={"validation_errors": errors} if errors else {},
     )
 
     return JSONResponse(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        content=error_response.dict(exclude_none=True),
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content=error_response.model_dump(exclude_none=True),
     )

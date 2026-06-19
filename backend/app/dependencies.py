@@ -2,6 +2,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from uuid import UUID
 
 from app.database import get_db
 from app.core.security import decode_access_token
@@ -22,6 +23,7 @@ async def get_current_user(
         user_id = payload.get("sub")
         if user_id is None:
             return None
+        user_id = UUID(str(user_id))
     except Exception:
         return None
 
@@ -43,6 +45,10 @@ async def require_user(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="登录会话已过期，请刷新页面后重新登录")
     user_id = payload.get("sub")
     if user_id is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="登录会话已过期，请刷新页面后重新登录")
+    try:
+        user_id = UUID(str(user_id))
+    except ValueError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="登录会话已过期，请刷新页面后重新登录")
 
     result = await db.execute(select(User).where(User.id == user_id))

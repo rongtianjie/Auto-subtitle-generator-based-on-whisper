@@ -16,6 +16,12 @@ from app.core.exceptions import (
 )
 
 
+def _coerce_uuid(value: UUID | str | None) -> UUID | None:
+    if value is None or isinstance(value, UUID):
+        return value
+    return UUID(str(value))
+
+
 class TaskCreationService:
     """任务创建服务"""
 
@@ -34,6 +40,7 @@ class TaskCreationService:
         client_ip: str | None = None,
     ) -> Task:
         """创建新任务"""
+        user_id = _coerce_uuid(user_id)
         # 验证参数
         if source_type not in ("upload", "url"):
             raise ValidationException("source_type 必须是 upload 或 url")
@@ -86,6 +93,7 @@ class TaskQueryService:
         status: str | None = None,
     ) -> tuple[list[Task], int]:
         """获取用户的任务列表（优化的 offset/limit）"""
+        user_id = _coerce_uuid(user_id)
         query = select(Task).where(Task.user_id == user_id)
         count_query = select(func.count(Task.id)).where(Task.user_id == user_id)
 
@@ -177,6 +185,7 @@ class TaskAnalyticsService:
     @staticmethod
     async def get_user_stats(db: AsyncSession, user_id: UUID) -> dict:
         """获取用户的任务统计"""
+        user_id = _coerce_uuid(user_id)
         total = await db.scalar(
             select(func.count(Task.id)).where(Task.user_id == user_id)
         ) or 0
@@ -228,13 +237,33 @@ class TaskAnalyticsService:
 class TaskService:
     """任务服务（向后兼容）"""
 
-    create_task = TaskCreationService.create
-    get_task = TaskQueryService.get_by_id
-    get_user_tasks = TaskQueryService.get_by_user
-    get_task_outputs = TaskQueryService.get_outputs
-    count_guest_tasks_today = TaskQueryService.count_guest_tasks_today
-    cancel_task = TaskMutationService.cancel
-    delete_task = TaskMutationService.delete
+    @staticmethod
+    async def create_task(*args, **kwargs):
+        return await TaskCreationService.create(*args, **kwargs)
+
+    @staticmethod
+    async def get_task(*args, **kwargs):
+        return await TaskQueryService.get_by_id(*args, **kwargs)
+
+    @staticmethod
+    async def get_user_tasks(*args, **kwargs):
+        return await TaskQueryService.get_by_user(*args, **kwargs)
+
+    @staticmethod
+    async def get_task_outputs(*args, **kwargs):
+        return await TaskQueryService.get_outputs(*args, **kwargs)
+
+    @staticmethod
+    async def count_guest_tasks_today(*args, **kwargs):
+        return await TaskQueryService.count_guest_tasks_today(*args, **kwargs)
+
+    @staticmethod
+    async def cancel_task(*args, **kwargs):
+        return await TaskMutationService.cancel(*args, **kwargs)
+
+    @staticmethod
+    async def delete_task(*args, **kwargs):
+        return await TaskMutationService.delete(*args, **kwargs)
 
 
 task_service = TaskService()

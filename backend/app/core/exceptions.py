@@ -13,7 +13,7 @@
 from enum import Enum
 from fastapi import HTTPException, status
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 
@@ -64,7 +64,7 @@ class ErrorResponse(BaseModel):
 
     def dict(self, **kwargs):
         """覆盖 dict 方法以保留字段顺序"""
-        return super().dict(**kwargs)
+        return self.model_dump(**kwargs)
 
 
 class AppException(Exception):
@@ -85,10 +85,11 @@ class AppException(Exception):
 
     def to_response(self) -> ErrorResponse:
         """转换为标准错误响应"""
+        error_code = self.error_code.value if isinstance(self.error_code, ErrorCode) else str(self.error_code)
         return ErrorResponse(
-            error_code=str(self.error_code),
+            error_code=error_code,
             message=self.message,
-            timestamp=datetime.utcnow().isoformat() + "Z",
+            timestamp=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             details=self.details if self.details else None,
         )
 
@@ -218,10 +219,16 @@ class NotFoundException(AppException):
 class AlreadyExistsException(AppException):
     """资源已存在"""
 
-    def __init__(self, resource: str = "Resource", identifier: str | None = None):
-        msg = f"{resource} already exists"
+    def __init__(
+        self,
+        resource: str = "Resource",
+        identifier: str | None = None,
+        message: str | None = None,
+    ):
+        msg = message or f"{resource} already exists"
         if identifier:
-            msg += f": {identifier}"
+            if message is None:
+                msg += f": {identifier}"
         super().__init__(
             error_code=ErrorCode.ALREADY_EXISTS,
             message=msg,

@@ -5,8 +5,8 @@ API 集成测试
 """
 
 import pytest
-from uuid import uuid4
-from sqlalchemy.ext.asyncio import AsyncSession
+from uuid import uuid4, UUID
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.services.task_service import TaskCreationService, TaskQueryService, TaskMutationService
 from app.core.exceptions import ValidationException, NotFoundException
@@ -34,7 +34,7 @@ class TestTaskWorkflow:
             output_formats=["txt", "srt"],
             file_path=sample_audio_file,
             source_filename="sample.mp3",
-            user_id=uuid4(sample_user_id.encode()),
+            user_id=UUID(sample_user_id),
         )
 
         assert task.id is not None
@@ -75,7 +75,7 @@ class TestTaskWorkflow:
     ):
         """测试上传任务和 URL 任务可以共存"""
 
-        user_id = uuid4(sample_user_id.encode())
+        user_id = UUID(sample_user_id)
 
         # 创建上传任务
         upload_task = await TaskCreationService.create(
@@ -323,6 +323,7 @@ class TestConcurrentOperations:
 
     async def test_concurrent_task_creation(
         self,
+        test_db_engine,
         db_session: AsyncSession,
         sample_user: 'User',
         sample_audio_file: str,
@@ -331,17 +332,26 @@ class TestConcurrentOperations:
 
         import asyncio
 
+        session_factory = async_sessionmaker(
+            test_db_engine,
+            class_=AsyncSession,
+            expire_on_commit=False,
+        )
+
         async def create_task(index: int):
-            return await TaskCreationService.create(
-                db=db_session,
-                title=f"并发任务 {index}",
-                source_type="upload",
-                whisper_model="base",
-                output_formats=["txt"],
-                file_path=sample_audio_file,
-                source_filename=f"concurrent{index}.mp3",
-                user_id=sample_user.id,
-            )
+            async with session_factory() as local_db:
+                task = await TaskCreationService.create(
+                    db=local_db,
+                    title=f"并发任务 {index}",
+                    source_type="upload",
+                    whisper_model="base",
+                    output_formats=["txt"],
+                    file_path=sample_audio_file,
+                    source_filename=f"concurrent{index}.mp3",
+                    user_id=sample_user.id,
+                )
+                await local_db.commit()
+                return task
 
         # 并发创建 10 个任务
         tasks = await asyncio.gather(

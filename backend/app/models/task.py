@@ -1,8 +1,8 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, String, Text, Float, Integer, DateTime, ForeignKey, Index, func
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy import Boolean, String, Text, Float, Integer, DateTime, ForeignKey, Index, func, JSON
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -28,8 +28,8 @@ class Task(Base):
     translate_llm_model: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     # 输出配置
-    output_formats: Mapped[dict] = mapped_column(JSONB, nullable=False, default=list)  # ["txt", "srt", "bilingual_srt"]
-    translate_target_langs: Mapped[dict | None] = mapped_column(JSONB, nullable=True)  # ["zh", "ja", ...]
+    output_formats: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)  # ["txt", "srt", "bilingual_srt"]
+    translate_target_langs: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)  # ["zh", "ja", ...]
 
     # 状态与进度
     status: Mapped[str] = mapped_column(

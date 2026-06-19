@@ -104,8 +104,7 @@ async def lifespan(app: FastAPI):
     # 启动检查
     logger.info("正在执行系统环境检查...")
     results = await checker.run_all()
-    ok = checker.print_report(results)
-
+    checker.print_report(results)
 
     app.state._start_time = time.time()
     yield
@@ -149,13 +148,12 @@ from app.api.v1 import auth, tasks, health, admin, files, models, logs, monitori
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(tasks.router, prefix="/api/v1")
 app.include_router(health.router, prefix="/api/v1")
+app.include_router(health.router)
 app.include_router(files.router, prefix="/api/v1")
 app.include_router(admin.router, prefix="/api/v1")
 app.include_router(models.router, prefix="/api/v1")
 app.include_router(logs.router, prefix="/api/v1")
 app.include_router(monitoring.router, prefix="/api/v1")
-app.include_router(admin.router, prefix="/api/v1")
-app.include_router(models.router, prefix="/api/v1")
 
 
 @app.get("/")

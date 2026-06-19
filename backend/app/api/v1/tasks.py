@@ -3,26 +3,36 @@ import os
 import asyncio
 import shutil
 import uuid
+import time
+from typing import Any
 from uuid import UUID
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, UploadFile, File, Form, status, Query, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sse_starlette.sse import EventSourceResponse
+from loguru import logger
 
-from app.database import get_db, async_session_factory
+from app.database import get_db, get_fresh_db
 from app.dependencies import get_current_user
 from app.models.user import User
 from app.models.task import Task
 from app.schemas.task import (
-    TaskCreate, TaskResponse, TaskOutputResponse, TaskListResponse, QueueStatusResponse
+    TaskCreate,
+    TaskResponse,
+    TaskOutputResponse,
+    TaskListResponse,
+    QueueStatusResponse,
+    TaskUpdateRequest,
 )
 from app.services.task_service import task_service
 from app.services.config_service import get_config_value
 from app.core.task_queue import task_queue
 from app.core.storage import storage
+from app.core.rate_limiter import upload_rate_limiter
+from app.core.validators import validate_upload
 from app.config import settings
 from app.core.exceptions import (
     ValidationException,
@@ -31,11 +41,44 @@ from app.core.exceptions import (
     QuotaExceededException,
     OperationNotAllowedException,
     ForbiddenException,
+    UnauthorizedException,
     TooManyRequestsException,
 )
 from app.core.sse_manager import sse_manager
 
 router = APIRouter(prefix="/tasks", tags=["任务"])
+
+
+def _parse_task_id(task_id: str) -> UUID:
+    """将字符串任务 ID 解析为 UUID，非法值视为未找到。"""
+    try:
+        return UUID(task_id)
+    except (TypeError, ValueError) as exc:
+        raise NotFoundException(resource="Task", identifier=task_id) from exc
+
+
+def _parse_json_list_field(value: Any, field_name: str) -> list[str]:
+    """兼容 JSON 字符串和单值表单字段的列表解析。"""
+    if value is None:
+        raise ValidationException(detail=f"{field_name} 不能为空")
+
+    if isinstance(value, list):
+        parsed = value
+    elif isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            parsed = [value]
+    else:
+        raise ValidationException(detail=f"{field_name} 格式无效")
+
+    if isinstance(parsed, str):
+        parsed = [parsed]
+
+    if not isinstance(parsed, list) or not all(isinstance(item, str) for item in parsed):
+        raise ValidationException(detail=f"{field_name} 格式无效")
+
+    return parsed
 
 
 def _task_to_response(task: Task) -> TaskResponse:
@@ -75,7 +118,7 @@ async def create_task(
     source_url: str = Form(None),
     title: str = Form(None),
     whisper_model: str = Form("base"),
-    output_formats: str = Form('["txt","srt","vtt"]'),
+    output_formats: str = Form('["txt","srt","bilingual_srt"]'),
     translate_target_langs: str = Form(None),
     file: UploadFile = File(None),
     db: AsyncSession = Depends(get_db),
@@ -83,15 +126,10 @@ async def create_task(
     request: Request = None,
 ):
     """创建任务：支持上传文件或提交 URL"""
-    try:
-        parsed_formats = json.loads(output_formats)
-    except (json.JSONDecodeError, TypeError):
-        raise ValidationException(detail="output_formats 格式无效")
-
-    try:
-        parsed_langs = json.loads(translate_target_langs) if translate_target_langs else None
-    except (json.JSONDecodeError, TypeError):
-        raise ValidationException(detail="translate_target_langs 格式无效")
+    parsed_formats = _parse_json_list_field(output_formats, "output_formats")
+    parsed_langs = None
+    if translate_target_langs:
+        parsed_langs = _parse_json_list_field(translate_target_langs, "translate_target_langs")
 
     file_path = None
     source_filename = None
@@ -221,32 +259,72 @@ async def get_queue_status(db: AsyncSession = Depends(get_db)):
     return QueueStatusResponse(**info)
 
 
+@router.get("/queue/status", response_model=QueueStatusResponse)
+async def get_queue_status_alias(db: AsyncSession = Depends(get_db)):
+    return await get_queue_status(db)
+
+
 @router.get("/{task_id}", response_model=TaskResponse)
-async def get_task(task_id: UUID, db: AsyncSession = Depends(get_db)):
-    task = await task_service.get_task(db, task_id)
+async def get_task(task_id: str, db: AsyncSession = Depends(get_db)):
+    parsed_task_id = _parse_task_id(task_id)
+    task = await task_service.get_task(db, parsed_task_id)
     if not task:
-        raise NotFoundException(resource="Task", identifier=str(task_id))
+        raise NotFoundException(resource="Task", identifier=task_id)
+    return _task_to_response(task)
+
+
+@router.patch("/{task_id}", response_model=TaskResponse)
+async def update_task(
+    task_id: str,
+    payload: TaskUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User | None = Depends(get_current_user),
+):
+    parsed_task_id = _parse_task_id(task_id)
+    task = await task_service.get_task(db, parsed_task_id)
+    if not task:
+        raise NotFoundException(resource="Task", identifier=task_id)
+
+    if current_user and task.user_id and task.user_id != current_user.id and current_user.role != "admin":
+        raise ForbiddenException("无权修改此任务")
+    if not current_user and task.user_id is not None:
+        raise ForbiddenException("无权修改此任务")
+
+    updates = payload.model_dump(exclude_unset=True)
+    for field_name, value in updates.items():
+        setattr(task, field_name, value)
+
+    if "status" in updates and updates["status"] == "completed":
+        task.progress = 1.0 if payload.progress is None else payload.progress
+    if "status" in updates and updates["status"] in {"processing", "queued"} and task.progress is None:
+        task.progress = 0.0
+
+    await db.flush()
     return _task_to_response(task)
 
 
 @router.delete("/{task_id}")
 async def delete_task(
-    task_id: UUID,
+    task_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User | None = Depends(get_current_user),
 ):
-    task = await task_service.get_task(db, task_id)
+    parsed_task_id = _parse_task_id(task_id)
+    task = await task_service.get_task(db, parsed_task_id)
     if not task:
-        raise NotFoundException(resource="Task", identifier=str(task_id))
+        raise NotFoundException(resource="Task", identifier=task_id)
+    if current_user is None:
+        raise UnauthorizedException("删除任务需要登录")
     if task.user_id != current_user.id and current_user.role != "admin":
         raise ForbiddenException("无权删除此任务")
-    await task_service.delete_task(db, task_id)
-    return {"message": "任务已删除"}
+    await task_service.delete_task(db, parsed_task_id)
+    return Response(status_code=204)
 
 
 @router.get("/{task_id}/outputs", response_model=list[TaskOutputResponse])
-async def get_task_outputs(task_id: UUID, db: AsyncSession = Depends(get_db)):
-    outputs = await task_service.get_task_outputs(db, task_id)
+async def get_task_outputs(task_id: str, db: AsyncSession = Depends(get_db)):
+    parsed_task_id = _parse_task_id(task_id)
+    outputs = await task_service.get_task_outputs(db, parsed_task_id)
     return [
         TaskOutputResponse(
             id=str(o.id),
@@ -262,16 +340,18 @@ async def get_task_outputs(task_id: UUID, db: AsyncSession = Depends(get_db)):
 
 
 @router.put("/{task_id}/cancel")
+@router.post("/{task_id}/cancel")
 async def cancel_own_task(
-    task_id: UUID,
+    task_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User | None = Depends(get_current_user),
 ):
     """取消自己的任务"""
-    result = await db.execute(select(Task).where(Task.id == task_id))
+    parsed_task_id = _parse_task_id(task_id)
+    result = await db.execute(select(Task).where(Task.id == parsed_task_id))
     task = result.scalar_one_or_none()
     if not task:
-        raise NotFoundException(resource="Task", identifier=str(task_id))
+        raise NotFoundException(resource="Task", identifier=task_id)
 
     # 任务所有者或管理员可以取消
     if current_user and task.user_id and task.user_id != current_user.id:
@@ -283,17 +363,15 @@ async def cancel_own_task(
     if task.status not in ("queued", "processing"):
         raise OperationNotAllowedException("只能取消正在处理或排队中的任务")
 
-    task.cancel_requested = True
-    task.progress_message = "正在等待当前阶段结束..."
-    await db.commit()
+    task = await task_service.cancel_task(db, parsed_task_id)
     await task_queue.update_queue_positions(db)
     await db.commit()
-    return {"message": "取消请求已发送"}
+    return _task_to_response(task)
 
 
 @router.get("/{task_id}/outputs/{output_id}/download")
 async def download_task_output(
-    task_id: UUID,
+    task_id: str,
     output_id: UUID,
     db: AsyncSession = Depends(get_db),
 ):
@@ -301,8 +379,9 @@ async def download_task_output(
     from app.models.task_output import TaskOutput
     from sqlalchemy import select
 
+    parsed_task_id = _parse_task_id(task_id)
     result = await db.execute(
-        select(TaskOutput).where(TaskOutput.id == output_id, TaskOutput.task_id == task_id)
+        select(TaskOutput).where(TaskOutput.id == output_id, TaskOutput.task_id == parsed_task_id)
     )
     output = result.scalar_one_or_none()
     if not output:
@@ -322,7 +401,7 @@ async def download_task_output(
 
 
 @router.get("/{task_id}/stream")
-async def stream_task_progress(task_id: UUID):
+async def stream_task_progress(task_id: str, db: AsyncSession = Depends(get_fresh_db)):
     """SSE 实时进度推送
 
     使用独立的数据库会话，避免会话缓存导致进度数据不更新
@@ -335,8 +414,9 @@ async def stream_task_progress(task_id: UUID):
     import uuid as uuid_module
     from app.core.sse_manager import sse_manager
 
+    parsed_task_id = _parse_task_id(task_id)
     connection_id = str(uuid_module.uuid4())
-    sse_manager.register(connection_id, str(task_id))
+    sse_manager.register(connection_id, str(parsed_task_id))
     last_heartbeat = time.time()
     heartbeat_interval = 10  # 每 10 秒发送一次心跳
 
@@ -351,33 +431,34 @@ async def stream_task_progress(task_id: UUID):
                     sse_manager.mark_cleanup()
 
                 try:
-                    async with async_session_factory() as fresh_db:
-                        task = await task_service.get_task(fresh_db, task_id)
-                        if not task:
-                            yield {
-                                "event": "error",
-                                "data": json.dumps({"message": "任务不存在"}),
-                            }
-                            break
-
-                        # 更新连接活动时间
-                        sse_manager.update_activity(connection_id)
-
-                        # 发送进度数据
-                        data = {
-                            "status": task.status,
-                            "progress": task.progress,
-                            "message": task.progress_message,
-                            "error_message": task.error_message,
-                            "queue_position": task.queue_position,
-                            "estimated_seconds": task.estimated_seconds,
+                    task = await task_service.get_task(db, parsed_task_id)
+                    if not task:
+                        yield {
+                            "event": "error",
+                            "data": json.dumps({"message": "任务不存在"}),
                         }
-                        yield {"event": "progress", "data": json.dumps(data)}
+                        break
 
-                        # 如果任务完成，发送完成事件并关闭
-                        if task.status in ("completed", "failed", "cancelled"):
-                            yield {"event": task.status, "data": json.dumps(data)}
-                            break
+                    await db.refresh(task)
+
+                    # 更新连接活动时间
+                    sse_manager.update_activity(connection_id)
+
+                    # 发送进度数据
+                    data = {
+                        "status": task.status,
+                        "progress": task.progress,
+                        "message": task.progress_message,
+                        "error_message": task.error_message,
+                        "queue_position": task.queue_position,
+                        "estimated_seconds": task.estimated_seconds,
+                    }
+                    yield {"event": "progress", "data": json.dumps(data)}
+
+                    # 如果任务完成，发送完成事件并关闭
+                    if task.status in ("completed", "failed", "cancelled"):
+                        yield {"event": task.status, "data": json.dumps(data)}
+                        break
                 except Exception as e:
                     logger.error(f"Error fetching task progress: {e}")
                     yield {

@@ -61,7 +61,7 @@ Content-Type: application/json
 
 ```json
 {
-  "error_code": "VALIDATION_ERROR",
+  "error_code": "INVALID_REQUEST",
   "message": "参数验证失败",
   "timestamp": "2026-06-19T12:34:56Z",
   "details": {
@@ -74,7 +74,7 @@ Content-Type: application/json
 
 | Code | HTTP | 说明 | 处理建议 |
 |------|------|------|--------|
-| `VALIDATION_ERROR` | 400 | 参数验证失败 | 检查请求参数 |
+| `INVALID_REQUEST` | 400 | 参数验证失败 | 检查请求参数 |
 | `AUTHENTICATION_FAILED` | 401 | 认证失败 | 重新登录获取 Token |
 | `TOKEN_EXPIRED` | 401 | Token 已过期 | 刷新 Token 或重新登录 |
 | `FORBIDDEN` | 403 | 无权限访问 | 检查用户权限 |
@@ -268,6 +268,7 @@ Authorization: Bearer <token>
 ```json
 {
   "id": "uuid",
+  "title": "My Task",
   "status": "processing",
   "cancel_requested": true,
   "progress_message": "正在等待当前阶段结束..."

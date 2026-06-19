@@ -7,14 +7,38 @@ API 端点集成测试
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.ext.asyncio import AsyncSession
+import json
 
 from app.main import app
+from app.database import get_db, get_fresh_db
+from app.core.rate_limiter import upload_rate_limiter
+from app.config import settings
 
 
 @pytest.fixture
-def client():
+def client(db_session: AsyncSession):
     """创建测试客户端"""
-    return TestClient(app)
+    async def override_get_db():
+        try:
+            yield db_session
+            await db_session.commit()
+        except Exception:
+            await db_session.rollback()
+            raise
+
+    app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_fresh_db] = override_get_db
+    upload_rate_limiter._requests.clear()
+    original_secret_key = settings.SECRET_KEY
+    settings.SECRET_KEY = "test-secret"
+    try:
+        with TestClient(app) as test_client:
+            yield test_client
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+        app.dependency_overrides.pop(get_fresh_db, None)
+        upload_rate_limiter._requests.clear()
+        settings.SECRET_KEY = original_secret_key
 
 
 @pytest.mark.asyncio
@@ -59,12 +83,12 @@ class TestTaskCreationAPI:
     def test_create_task_with_file(self, client: TestClient, sample_audio_file: str):
         """测试文件上传创建任务"""
         with open(sample_audio_file, 'rb') as f:
-            files = {'file': f}
+            files = {'file': ('sample.mp3', f, 'audio/mpeg')}
             data = {
                 'title': 'API 上传测试',
                 'source_type': 'upload',
                 'whisper_model': 'base',
-                'output_formats': ['txt', 'srt'],
+                'output_formats': json.dumps(['txt', 'srt']),
             }
             response = client.post("/api/v1/tasks", data=data, files=files)
 
@@ -80,9 +104,9 @@ class TestTaskCreationAPI:
             'source_type': 'url',
             'source_url': 'https://youtube.com/watch?v=test',
             'whisper_model': 'base',
-            'output_formats': ['srt'],
+            'output_formats': json.dumps(['srt']),
         }
-        response = client.post("/api/v1/tasks", json=data)
+        response = client.post("/api/v1/tasks", data=data)
 
         assert response.status_code == 201
         task = response.json()
@@ -103,13 +127,13 @@ class TestTaskCreationAPI:
             'title': 'No File',
             'source_type': 'upload',
             'whisper_model': 'base',
-            'output_formats': ['txt'],
+            'output_formats': json.dumps(['txt']),
         }
-        response = client.post("/api/v1/tasks", json=data)
+        response = client.post("/api/v1/tasks", data=data)
 
         assert response.status_code == 400
         error = response.json()
-        assert error['error_code'] == 'VALIDATION_ERROR'
+        assert error['error_code'] == 'INVALID_REQUEST'
 
 
 @pytest.mark.asyncio
@@ -165,24 +189,27 @@ class TestTaskQueryAPI:
 class TestTaskMutationAPI:
     """任务修改 API 端点测试"""
 
-    def test_cancel_task(self, client: TestClient, sample_task: 'Task'):
+    def test_cancel_task(self, client: TestClient, sample_task: 'Task', auth_headers):
         """测试取消任务"""
         # 先标记为处理中
         response = client.patch(
             f"/api/v1/tasks/{sample_task.id}",
-            json={'status': 'processing'}
+            json={'status': 'processing'},
+            headers=auth_headers,
         )
         assert response.status_code == 200
 
         # 取消任务
-        response = client.post(f"/api/v1/tasks/{sample_task.id}/cancel")
+        response = client.post(f"/api/v1/tasks/{sample_task.id}/cancel", headers=auth_headers)
         assert response.status_code == 200
         task = response.json()
+        assert task['status'] == 'processing'
         assert task['cancel_requested'] is True
+        assert task['progress_message'] == '正在等待当前阶段结束...'
 
-    def test_delete_task(self, client: TestClient, sample_task: 'Task'):
+    def test_delete_task(self, client: TestClient, sample_task: 'Task', auth_headers):
         """测试删除任务"""
-        response = client.delete(f"/api/v1/tasks/{sample_task.id}")
+        response = client.delete(f"/api/v1/tasks/{sample_task.id}", headers=auth_headers)
 
         assert response.status_code == 204
 
@@ -190,23 +217,23 @@ class TestTaskMutationAPI:
         response = client.get(f"/api/v1/tasks/{sample_task.id}")
         assert response.status_code == 404
 
-    def test_update_task_progress(self, client: TestClient, sample_task: 'Task'):
+    def test_update_task_progress(self, client: TestClient, sample_task: 'Task', auth_headers):
         """测试更新任务进度"""
         data = {
             'progress': 0.75,
             'progress_message': '处理中...',
         }
-        response = client.patch(f"/api/v1/tasks/{sample_task.id}", json=data)
+        response = client.patch(f"/api/v1/tasks/{sample_task.id}", json=data, headers=auth_headers)
 
         assert response.status_code == 200
         task = response.json()
         assert task['progress'] == 0.75
         assert task['progress_message'] == '处理中...'
 
-    def test_complete_task(self, client: TestClient, sample_task: 'Task'):
+    def test_complete_task(self, client: TestClient, sample_task: 'Task', auth_headers):
         """测试标记任务完成"""
         data = {'status': 'completed', 'progress': 1.0}
-        response = client.patch(f"/api/v1/tasks/{sample_task.id}", json=data)
+        response = client.patch(f"/api/v1/tasks/{sample_task.id}", json=data, headers=auth_headers)
 
         assert response.status_code == 200
         task = response.json()
@@ -257,15 +284,22 @@ class TestErrorHandling:
 class TestSSEStream:
     """SSE 流端点测试"""
 
-    def test_sse_connection(self, client: TestClient, sample_task: 'Task'):
+    def test_sse_connection(self, client: TestClient, sample_task: 'Task', auth_headers):
         """测试 SSE 连接"""
+        client.patch(
+            f"/api/v1/tasks/{sample_task.id}",
+            json={"status": "completed", "progress": 1.0},
+            headers=auth_headers,
+        )
         response = client.get(
             f"/api/v1/tasks/{sample_task.id}/stream",
             headers={"Accept": "text/event-stream"},
         )
 
         assert response.status_code == 200
-        assert response.headers.get("content-type") == "text/event-stream"
+        assert response.headers.get("content-type", "").startswith("text/event-stream")
+        assert "event: progress" in response.text
+        assert "event: completed" in response.text
 
     def test_sse_with_invalid_task(self, client: TestClient):
         """测试无效任务的 SSE 连接"""
@@ -275,7 +309,9 @@ class TestSSEStream:
             headers={"Accept": "text/event-stream"},
         )
 
-        assert response.status_code in [404, 400]
+        assert response.status_code == 200
+        assert response.headers.get("content-type", "").startswith("text/event-stream")
+        assert "任务不存在" in response.text or "error" in response.text
 
 
 @pytest.mark.asyncio

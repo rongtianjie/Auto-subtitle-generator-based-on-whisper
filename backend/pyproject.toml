@@ -37,6 +37,7 @@ dev = [
     "pytest-cov>=5.0.0",
     "locust>=2.19.0",
     "memory-profiler>=0.61.0",
+    "aiosqlite>=0.20.0",
 ]
 
 [tool.pytest.ini_options]

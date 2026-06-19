@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, ConfigDict, validator
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 from typing import List, Optional
 from uuid import UUID
 
@@ -15,7 +15,7 @@ class TaskCreateRequest(BaseModel):
         description="Whisper 模型"
     )
     output_formats: List[str] = Field(
-        ["txt", "srt", "vtt"],
+        ["txt", "srt", "bilingual_srt"],
         description="输出格式列表"
     )
     translate_target_langs: Optional[List[str]] = Field(
@@ -23,20 +23,22 @@ class TaskCreateRequest(BaseModel):
         description="翻译目标语言列表"
     )
 
-    @validator("output_formats")
+    @field_validator("output_formats")
+    @classmethod
     def validate_output_formats(cls, v):
         """验证输出格式"""
         if not v:
             raise ValueError("至少需要选择一个输出格式")
 
-        allowed = {"txt", "srt", "vtt"}
+        allowed = {"txt", "srt", "bilingual_srt", "vtt"}
         invalid = set(v) - allowed
         if invalid:
             raise ValueError(f"不支持的输出格式: {invalid}")
 
         return v
 
-    @validator("translate_target_langs", pre=True, always=True)
+    @field_validator("translate_target_langs", mode="before")
+    @classmethod
     def validate_languages(cls, v):
         """验证翻译语言"""
         if not v:
@@ -53,9 +55,11 @@ class TaskCreateRequest(BaseModel):
 
         return v
 
-    @validator("source_url")
-    def validate_source_url(cls, v, values):
+    @field_validator("source_url")
+    @classmethod
+    def validate_source_url(cls, v, info):
         """验证 source_url (当 source_type=url 时)"""
+        values = getattr(info, "data", {}) or {}
         if values.get("source_type") == "url" and not v:
             raise ValueError("source_type=url 时必须提供 source_url")
         return v
@@ -67,8 +71,17 @@ class TaskCreate(BaseModel):
     source_url: Optional[str] = None
     title: Optional[str] = None
     whisper_model: str = Field(default="base", pattern="^(tiny|base|small|medium|large)$")
-    output_formats: List[str] = Field(default=["txt", "srt", "vtt"])
+    output_formats: List[str] = Field(default=["txt", "srt", "bilingual_srt"])
     translate_target_langs: Optional[List[str]] = None
+
+
+class TaskUpdateRequest(BaseModel):
+    """更新任务请求"""
+
+    title: Optional[str] = Field(None, max_length=255)
+    status: Optional[str] = Field(None, pattern="^(pending|queued|processing|completed|failed|cancelled)$")
+    progress: Optional[float] = Field(None, ge=0.0, le=1.0)
+    progress_message: Optional[str] = Field(None, max_length=255)
 
 
 class TaskResponse(BaseModel):

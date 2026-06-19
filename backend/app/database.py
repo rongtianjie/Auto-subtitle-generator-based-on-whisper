@@ -35,3 +35,15 @@ async def get_db():
             raise
         finally:
             await session.close()
+
+
+async def get_fresh_db():
+    """获取只读会话，不在依赖层自动提交。
+
+    适用于 SSE / 长轮询等需要显式刷新数据的场景。
+    """
+    async with async_session_factory() as session:
+        try:
+            yield session
+        finally:
+            await session.close()

@@ -32,7 +32,7 @@ async def register(data: UserRegister, db: AsyncSession = Depends(get_db)):
             created_at=str(user.created_at),
         )
     except ValueError as e:
-        raise AlreadyExistsException(resource="User", identifier=data.username)
+        raise AlreadyExistsException(resource="User", identifier=data.username, message=str(e))
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -40,7 +40,7 @@ async def login(data: UserLogin, db: AsyncSession = Depends(get_db)):
     try:
         user, access_token, refresh_token = await auth_service.login(db, data.username, data.password)
         return TokenResponse(access_token=access_token, refresh_token=refresh_token)
-    except ValueError as e:
+    except ValueError:
         raise InvalidCredentialsException()
 
 
@@ -80,7 +80,7 @@ async def register_admin(data: UserRegister, db: AsyncSession = Depends(get_db))
     except PermissionError as e:
         raise ForbiddenException(str(e))
     except ValueError as e:
-        raise AlreadyExistsException(resource="User", identifier=data.username)
+        raise AlreadyExistsException(resource="User", identifier=data.username, message=str(e))
 
 
 @router.get("/me", response_model=UserResponse)

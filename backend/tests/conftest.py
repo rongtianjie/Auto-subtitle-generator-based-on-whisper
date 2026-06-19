@@ -18,8 +18,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sess
 from app.database import Base
 from app.models.user import User
 from app.models.task import Task
-from app.core.security import get_password_hash
-from app.core.exceptions import UnauthorizedException
+from app.core.security import hash_password
+from app.core.security import create_access_token
 
 
 # 测试资源目录
@@ -74,11 +74,12 @@ async def db_session(test_db_engine):
 @pytest.fixture
 async def sample_user(db_session: AsyncSession) -> User:
     """创建示例用户"""
+    user_id = uuid4()
     user = User(
-        id=uuid4(),
-        username="testuser",
-        email="test@example.com",
-        hashed_password=get_password_hash("password123"),
+        id=user_id,
+        username=f"testuser-{user_id.hex[:8]}",
+        email=f"test-{user_id.hex[:8]}@example.com",
+        password_hash=hash_password("password123"),
         is_active=True,
     )
     db_session.add(user)
@@ -95,11 +96,12 @@ async def sample_user_id(sample_user: User) -> str:
 @pytest.fixture
 async def admin_user(db_session: AsyncSession) -> User:
     """创建管理员用户"""
+    user_id = uuid4()
     user = User(
-        id=uuid4(),
-        username="admin",
-        email="admin@example.com",
-        hashed_password=get_password_hash("admin123"),
+        id=user_id,
+        username=f"admin-{user_id.hex[:8]}",
+        email=f"admin-{user_id.hex[:8]}@example.com",
+        password_hash=hash_password("admin123"),
         is_active=True,
         is_admin=True,
     )
@@ -149,17 +151,18 @@ async def guest_task(db_session: AsyncSession) -> Task:
 @pytest.fixture
 def auth_headers(sample_user: User):
     """获取认证头（需要实现 JWT 生成）"""
-    # 这个需要根据实际的认证实现调整
+    token = create_access_token({"sub": str(sample_user.id), "role": sample_user.role})
     return {
-        "Authorization": f"Bearer fake_token_for_{sample_user.id}"
+        "Authorization": f"Bearer {token}"
     }
 
 
 @pytest.fixture
 def admin_auth_headers(admin_user: User):
     """获取管理员认证头"""
+    token = create_access_token({"sub": str(admin_user.id), "role": admin_user.role})
     return {
-        "Authorization": f"Bearer fake_admin_token_for_{admin_user.id}"
+        "Authorization": f"Bearer {token}"
     }
 
 
@@ -192,4 +195,3 @@ def sample_audio_file():
         sample_path.write_text("fake audio data")
 
     return str(sample_path)
-

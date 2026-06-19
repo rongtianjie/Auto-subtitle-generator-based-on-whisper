@@ -18,11 +18,21 @@ def test_app():
     """创建测试用 FastAPI 实例（无 lifespan）"""
     from fastapi import FastAPI
     from fastapi.middleware.cors import CORSMiddleware
+    from fastapi.exceptions import RequestValidationError
     from app.api.v1 import auth, health
+    from app.core.exceptions import AppException
+    from app.core.exception_handlers import (
+        app_exception_handler,
+        general_exception_handler,
+        validation_exception_handler,
+    )
 
     app = FastAPI(lifespan=None)
     app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True,
                        allow_methods=["*"], allow_headers=["*"])
+    app.add_exception_handler(AppException, app_exception_handler)
+    app.add_exception_handler(RequestValidationError, validation_exception_handler)
+    app.add_exception_handler(Exception, general_exception_handler)
     app.include_router(auth.router, prefix="/api/v1")
     app.include_router(health.router, prefix="/api/v1")
 
@@ -94,7 +104,7 @@ class TestAuthAPI:
                 "username": "existing", "email": "a@b.com", "password": "password123",
             })
 
-        assert response.status_code == 400
+        assert response.status_code == 409
         assert "用户名已存在" in response.text
 
     @pytest.mark.asyncio
