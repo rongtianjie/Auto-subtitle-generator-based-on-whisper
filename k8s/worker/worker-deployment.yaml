@@ -1,0 +1,100 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+  namespace: subweaver
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: worker
+  template:
+    metadata:
+      labels:
+        app: worker
+    spec:
+      containers:
+      - name: worker
+        image: subweaver-backend:latest
+        imagePullPolicy: Always
+        command:
+        - python
+        - -m
+        - app.worker.worker
+        env:
+        - name: DATABASE_URL
+          value: "postgresql+asyncpg://postgres:change-me-in-production@postgres:5432/subweaver"
+        - name: REDIS_URL
+          value: "redis://redis:6379/0"
+        - name: SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: subweaver-secret
+              key: SECRET_KEY
+        - name: LLM_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: subweaver-secret
+              key: LLM_API_KEY
+        - name: DEBUG
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: DEBUG
+        - name: LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: LOG_LEVEL
+        - name: PROMETHEUS_ENABLED
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: PROMETHEUS_ENABLED
+        - name: WORKER_POLL_INTERVAL
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: WORKER_POLL_INTERVAL
+        volumeMounts:
+        - name: storage
+          mountPath: /app/storage
+        resources:
+          requests:
+            cpu: 1000m
+            memory: 1Gi
+          limits:
+            cpu: 4000m
+            memory: 4Gi
+      volumes:
+      - name: storage
+        persistentVolumeClaim:
+          claimName: backend-storage
+
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: worker-hpa
+  namespace: subweaver
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: worker
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 75
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 85

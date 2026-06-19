@@ -1,0 +1,57 @@
+groups:
+  - name: application
+    interval: 30s
+    rules:
+      - alert: HighErrorRate
+        expr: 'rate(http_requests_total{status_code=~"5.."}[5m]) > 0.05'
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "高错误率告警"
+          description: "{{ $labels.endpoint }} 错误率 > 5%"
+
+      - alert: HighLatency
+        expr: 'histogram_quantile(0.95, http_request_duration_seconds) > 1'
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "高延迟告警"
+          description: "p95 延迟 > 1s"
+
+      - alert: DatabaseDown
+        expr: 'up{job="postgres"} == 0'
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "数据库连接失败"
+          description: "PostgreSQL 数据库无法连接"
+
+      - alert: HighMemoryUsage
+        expr: 'container_memory_usage_bytes > 1800000000'
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "内存使用过高"
+          description: "内存使用 > 1.8GB"
+
+      - alert: HighCPUUsage
+        expr: 'rate(container_cpu_usage_seconds_total[5m]) > 0.8'
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "CPU 使用过高"
+          description: "CPU 使用率 > 80%"
+
+      - alert: DiskSpaceLow
+        expr: 'node_filesystem_avail_bytes / node_filesystem_size_bytes < 0.1'
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "磁盘空间不足"
+          description: "磁盘可用空间 < 10%"

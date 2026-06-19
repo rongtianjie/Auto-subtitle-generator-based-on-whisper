@@ -1,71 +1,202 @@
-# 通用后端环境变量
-x-backend-env: &backend-env
-  DATABASE_URL: postgresql+asyncpg://subweaver:${DB_PASSWORD:-subweaver_secret}@db:5432/subweaver
-  TZ: Asia/Shanghai
-  LLM_BASE_URL: ${LLM_BASE_URL:-http://host.docker.internal:8000/v1}
-  LLM_API_KEY: ${LLM_API_KEY:-1234}
-  LLM_MODEL: ${LLM_MODEL:-}
-  WHISPER_MODEL_DIR: /app/models
-  STORAGE_DIR: /app/storage
-  MAX_FILE_SIZE_MB: ${MAX_FILE_SIZE_MB:-500}
-  RETENTION_DAYS: ${RETENTION_DAYS:-30}
-  SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
-  CORS_ORIGINS: ${CORS_ORIGINS:-"[\"http://localhost:80\",\"http://localhost\"]"}
+version: '3.9'
 
 services:
-  db:
+  # PostgreSQL 数据库
+  postgres:
     image: postgres:16-alpine
-    restart: always
+    container_name: subweaver-postgres
     environment:
-      POSTGRES_DB: subweaver
-      POSTGRES_USER: subweaver
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-subweaver_secret}
-    volumes:
-      - pgdata:/var/lib/postgresql/data
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-change-me-in-production}
+      POSTGRES_DB: ${DB_NAME:-subweaver}
+      PGDATA: /var/lib/postgresql/data/pgdata
     ports:
       - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/alembic/versions:/docker-entrypoint-initdb.d
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U subweaver -d subweaver"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-subweaver}"]
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - subweaver-network
+    restart: unless-stopped
 
-  backend:
-    build: ./backend
-    restart: always
-    depends_on:
-      db:
-        condition: service_healthy
-    environment:
-      <<: *backend-env
-    volumes:
-      - models:/app/models
-      - storage:/app/storage
+  # Redis 缓存
+  redis:
+    image: redis:7-alpine
+    container_name: subweaver-redis
     ports:
-      - "8765:8000"
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - subweaver-network
+    restart: unless-stopped
+    command: redis-server --appendonly yes
 
-  worker:
-    build: ./backend
-    restart: always
+  # 后端 API 服务
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: subweaver-backend
     depends_on:
-      db:
+      postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     environment:
-      <<: *backend-env
+      DATABASE_URL: postgresql+asyncpg://${DB_USER:-postgres}:${DB_PASSWORD:-change-me-in-production}@postgres:5432/${DB_NAME:-subweaver}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
+      DEBUG: ${DEBUG:-false}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      LLM_MODEL: ${LLM_MODEL:-gpt-3.5-turbo}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://api.openai.com/v1}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      STORAGE_DIR: /app/storage
+      PROMETHEUS_ENABLED: ${PROMETHEUS_ENABLED:-true}
+      WORKER_POLL_INTERVAL: ${WORKER_POLL_INTERVAL:-5}
+    ports:
+      - "8000:8000"
     volumes:
-      - models:/app/models
-      - storage:/app/storage
-    command: python run_worker.py
+      - ./backend:/app
+      - backend_storage:/app/storage
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 5s
+      retries: 3
+    networks:
+      - subweaver-network
+    restart: unless-stopped
 
+  # 后台任务 Worker
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: subweaver-worker
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${DB_USER:-postgres}:${DB_PASSWORD:-change-me-in-production}@postgres:5432/${DB_NAME:-subweaver}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
+      LLM_MODEL: ${LLM_MODEL:-gpt-3.5-turbo}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://api.openai.com/v1}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      STORAGE_DIR: /app/storage
+      PROMETHEUS_ENABLED: ${PROMETHEUS_ENABLED:-true}
+      WORKER_POLL_INTERVAL: ${WORKER_POLL_INTERVAL:-5}
+    volumes:
+      - ./backend:/app
+      - backend_storage:/app/storage
+    networks:
+      - subweaver-network
+    restart: unless-stopped
+    command: python -m app.worker.worker
+    profiles:
+      - full
+
+  # 前端应用
   frontend:
-    build: ./frontend
-    restart: always
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: subweaver-frontend
     depends_on:
       - backend
     ports:
-      - "80:80"
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://backend:8000}
+      VITE_APP_NAME: ${APP_NAME:-Whisper 自动字幕生成平台}
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 10s
+      start_period: 5s
+      retries: 3
+    networks:
+      - subweaver-network
+    restart: unless-stopped
+
+  # Prometheus 监控
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: subweaver-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./monitoring/rules.yml:/etc/prometheus/rules.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+    networks:
+      - subweaver-network
+    restart: unless-stopped
+    profiles:
+      - full
+      - monitoring
+
+  # Grafana 仪表板
+  grafana:
+    image: grafana/grafana:latest
+    container_name: subweaver-grafana
+    ports:
+      - "3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SERVER_ROOT_URL: http://localhost:3001
+      GF_INSTALL_PLUGINS: grafana-piechart-panel
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
+    depends_on:
+      - prometheus
+    networks:
+      - subweaver-network
+    restart: unless-stopped
+    profiles:
+      - full
+      - monitoring
 
 volumes:
-  pgdata:
-  models:
-  storage:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  backend_storage:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+networks:
+  subweaver-network:
+    driver: bridge
