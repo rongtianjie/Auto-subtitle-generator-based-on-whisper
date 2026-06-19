@@ -13,6 +13,7 @@ from app.worker.translator import translator
 from app.worker.yt_dlp_downloader import yt_dlp_downloader
 from app.core.task_queue import task_queue
 from app.core.storage import storage
+from app.core.error_handling import handle_task_error, ExponentialBackoff, retry_with_backoff
 from app.models.task import Task
 from app.models.task_output import TaskOutput
 from app.database import async_session_factory
@@ -25,6 +26,11 @@ class Worker:
 
     def __init__(self):
         self._running = False
+        self._current_task_id: UUID | None = None
+        # 监控指标
+        self._tasks_processed = 0
+        self._tasks_succeeded = 0
+        self._tasks_failed = 0
 
     async def run(self):
         """Worker 主循环"""
@@ -33,6 +39,7 @@ class Worker:
 
         # 启动定期清理任务
         cleanup_task = asyncio.create_task(self._periodic_cleanup())
+        shutdown_timeout = 30  # 优雅关闭超时时间（秒）
 
         try:
             while self._running:
@@ -56,15 +63,30 @@ class Worker:
                             await db.commit()
 
                     await asyncio.sleep(settings.WORKER_POLL_INTERVAL)
+
+                except asyncio.CancelledError:
+                    logger.info("Worker 收到取消信号")
+                    break
+                except ConnectionError as e:
+                    # 数据库连接错误，指数退避重试
+                    logger.warning(f"数据库连接错误，将重试: {e}")
+                    await asyncio.sleep(min(2 ** 3, 30))  # 最多等待 30 秒
                 except Exception as e:
-                    logger.error(f"Worker 循环异常: {e}")
+                    logger.error(f"Worker 循环异常: {type(e).__name__}: {e}", exc_info=True)
                     await asyncio.sleep(5)
+
         finally:
+            logger.info("Worker 正在关闭，等待当前任务完成...")
+            # 优雅关闭：等待清理任务结束
             cleanup_task.cancel()
             try:
-                await cleanup_task
-            except asyncio.CancelledError:
-                pass
+                await asyncio.wait_for(
+                    cleanup_task,
+                    timeout=shutdown_timeout
+                )
+            except (asyncio.CancelledError, asyncio.TimeoutError):
+                logger.warning("清理任务在超时或取消后已停止")
+            logger.info("Worker 已关闭")
 
     async def _periodic_cleanup(self):
         """定期清理过期文件（每小时执行一次）"""
@@ -81,7 +103,23 @@ class Worker:
                 logger.warning(f"过期文件清理异常: {e}")
 
     async def stop(self):
+        """优雅停止 Worker"""
+        logger.info(f"正在停止 Worker (当前任务: {self._current_task_id})...")
         self._running = False
+
+    def get_stats(self) -> dict:
+        """获取 Worker 统计信息"""
+        total = self._tasks_processed
+        success_rate = (self._tasks_succeeded / total * 100) if total > 0 else 0
+
+        return {
+            "running": self._running,
+            "tasks_processed": total,
+            "tasks_succeeded": self._tasks_succeeded,
+            "tasks_failed": self._tasks_failed,
+            "success_rate": round(success_rate, 2),
+            "current_task_id": str(self._current_task_id) if self._current_task_id else None,
+        }
 
     async def _process_task(self, task: Task):
         """处理单个任务"""
