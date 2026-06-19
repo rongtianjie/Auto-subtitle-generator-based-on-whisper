@@ -13,21 +13,21 @@
 ```bash
 # 1. 克隆仓库
 git clone <repository-url>
-cd Auto-subtitle-generator-based-on-whisper
+cd SubWeaver
 
 # 2. 配置环境变量
 cp .env.example .env
 # 编辑 .env 文件，修改敏感配置
 
-# 3. 启动容器
-docker-compose up -d
+# 3. 启动默认核心服务
+docker compose up -d
 
 # 4. 检查服务状态
-docker-compose ps
-docker-compose logs -f backend
+docker compose ps
+docker compose logs -f backend
 
-# 5. 初始化数据库 (如需要)
-docker-compose exec backend python -m alembic upgrade head
+# 5. 如需完整栈（worker + Prometheus + Grafana）
+docker compose --profile full up -d
 
 # 6. 访问应用
 # 前端: http://localhost:3000
@@ -35,6 +35,8 @@ docker-compose exec backend python -m alembic upgrade head
 # Grafana: http://localhost:3001
 # Prometheus: http://localhost:9090
 ```
+
+默认 `docker compose up -d` 只会启动 `postgres`、`redis`、`backend`、`frontend` 四个核心服务；`worker`、`prometheus`、`grafana` 需要显式启用 profile。
 
 ### 容器架构
 
@@ -245,8 +247,9 @@ jobs:
       
       - name: Run tests
         run: |
-          pip install -e ./backend[dev]
-          pytest backend/tests -v --cov=app
+          cd backend
+          uv sync --extra dev
+          uv run pytest tests -v --cov=app
       
       - name: Upload coverage
         uses: codecov/codecov-action@v3
@@ -290,37 +293,34 @@ groups:
 
 ```bash
 # 定期备份 PostgreSQL
-docker-compose exec postgres pg_dump -U postgres subweaver > backup.sql
+docker compose exec postgres pg_dump -U postgres subweaver > backup.sql
 
 # 恢复数据库
-docker-compose exec -T postgres psql -U postgres subweaver < backup.sql
+docker compose exec -T postgres psql -U postgres subweaver < backup.sql
 ```
 
 ### 日志管理
 
 ```bash
 # 查看服务日志
-docker-compose logs -f backend
-docker-compose logs -f worker
+docker compose logs -f backend
+docker compose logs -f worker
 
 # 清理日志
-docker-compose down -v
+docker compose down -v
 ```
 
 ### 升级应用
 
 ```bash
 # 1. 构建新镜像
-docker-compose build --no-cache
+docker compose build --no-cache
 
 # 2. 更新容器
-docker-compose up -d
-
-# 3. 运行迁移 (如需要)
-docker-compose exec backend alembic upgrade head
+docker compose up -d
 
 # 4. 检查健康状态
-docker-compose ps
+docker compose ps
 ```
 
 ## 安全建议

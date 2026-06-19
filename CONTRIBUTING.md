@@ -28,25 +28,25 @@
 
 ```bash
 git clone <repository-url>
-cd Auto-subtitle-generator-based-on-whisper
+cd SubWeaver
 ```
 
 #### 2. 设置后端环境
 
 ```bash
 # 创建虚拟环境
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
+uv venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
 
 # 安装依赖
-pip install -e ".[dev]"
+uv sync --extra dev
 
 # 设置环境变量
 cp .env.example .env
 # 编辑 .env 文件，配置本地数据库等
 
 # 初始化数据库
-python -m alembic upgrade head
+uv run python -m alembic upgrade head
 ```
 
 #### 3. 设置前端环境
@@ -62,12 +62,14 @@ npm run dev
 
 后端：
 ```bash
-python -m uvicorn app.main:app --reload --port 8000
+cd backend
+uv run python -m uvicorn app.main:app --reload --port 8000
 ```
 
 Worker（另一个终端）：
 ```bash
-python -m app.worker.worker
+cd backend
+uv run python -m app.worker.worker
 ```
 
 前端已在 `npm run dev` 中运行在 http://localhost:5173
@@ -75,11 +77,13 @@ python -m app.worker.worker
 #### 5. 使用 Docker Compose（推荐）
 
 ```bash
-docker-compose up -d
+docker compose up -d
 # 访问：
 # - 前端: http://localhost:3000
 # - API: http://localhost:8000
-# - 监控: http://localhost:9090 (Prometheus) / http://localhost:3001 (Grafana)
+# - 监控: docker compose --profile full up -d 后可访问
+#   - Prometheus: http://localhost:9090
+#   - Grafana: http://localhost:3001
 ```
 
 ## 代码风格和质量

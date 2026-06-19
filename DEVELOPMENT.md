@@ -26,14 +26,15 @@ make docker-up
 ```bash
 # 终端 1: 后端 API
 cd backend
-python -m uvicorn app.main:app --reload
+uv run python -m uvicorn app.main:app --reload --port 8000
 
 # 终端 2: 前端
 cd frontend
 npm run dev
 
 # 终端 3: Worker
-python -m app.worker.worker
+cd backend
+uv run python -m app.worker.worker
 ```
 
 ## 开发工作流
@@ -264,7 +265,7 @@ import ipdb; ipdb.set_trace()
 
 ```bash
 # 进入数据库
-docker-compose exec postgres psql -U postgres -d subweaver
+docker compose exec postgres psql -U postgres -d subweaver
 
 # 查看表结构
 \dt
@@ -283,7 +284,7 @@ SELECT * FROM tasks LIMIT 10;
 curl -X GET http://localhost:8000/api/v1/tasks
 
 # 使用 httpie (更友好)
-pip install httpie
+uv tool install httpie
 http GET localhost:8000/api/v1/tasks
 
 # 使用 FastAPI 的交互式文档
@@ -294,16 +295,16 @@ http GET localhost:8000/api/v1/tasks
 
 ```bash
 # 查看实时日志
-docker-compose logs -f backend
+docker compose logs -f backend
 
 # 查看特定服务的日志
-docker-compose logs -f worker
+docker compose logs -f worker
 
 # 搜索日志
-docker-compose logs backend | grep "ERROR"
+docker compose logs backend | grep "ERROR"
 
-# 查看已保存的日志
-curl http://localhost:8000/logs/recent
+# 查看管理端日志文件列表（需要管理员认证）
+curl http://localhost:8000/api/v1/admin/logs
 ```
 
 ## 性能分析
@@ -346,7 +347,7 @@ python -m memory_profiler script.py
 # command: ["postgres", "-c", "log_statement=all"]
 
 # 查看慢查询
-curl http://localhost:8000/health/db-stats
+curl http://localhost:8000/api/v1/health/db-stats
 ```
 
 ## 测试策略
@@ -435,16 +436,16 @@ test('user can create and update task', async ({ page }) => {
 ## 常见问题
 
 ### Q: 修改了 Dockerfile 后需要重新构建吗？
-A: 需要。运行 `docker-compose build --no-cache`
+A: 需要。运行 `docker compose build --no-cache`
 
 ### Q: 如何重置数据库？
-A: 运行 `make db-reset` 或 `docker-compose down -v`
+A: 运行 `make db-reset` 或 `docker compose down -v`
 
 ### Q: 前端 hot reload 不工作？
 A: 检查 frontend/vite.config.ts 中的 HMR 配置
 
 ### Q: Worker 任务卡住了怎么办？
-A: 查看日志 `docker-compose logs worker`，如需要可重启 `docker-compose restart worker`
+A: 查看日志 `docker compose logs worker`，如需要可重启 `docker compose restart worker`
 
 ### Q: 如何连接远程数据库进行测试？
 A: 修改 .env 中的 DATABASE_URL，指向远程数据库

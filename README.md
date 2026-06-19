@@ -11,7 +11,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/python-3.11+-blue?logo=python" alt="Python">
   <img src="https://img.shields.io/badge/FastAPI-0.115+-009688?logo=fastapi" alt="FastAPI">
-  <img src="https://img.shields.io/badge/React-19-61DAFB?logo=react" alt="React">
+  <img src="https://img.shields.io/badge/React-18-61DAFB?logo=react" alt="React">
   <img src="https://img.shields.io/badge/PostgreSQL-16+-4169E1?logo=postgresql" alt="PostgreSQL">
   <img src="https://img.shields.io/badge/Docker-compose-2496ED?logo=docker" alt="Docker">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
@@ -57,7 +57,7 @@ Built with FastAPI + React + PostgreSQL, it features a clean dashboard, real-tim
 | Layer | Technology |
 |-------|-----------|
 | **Backend** | Python 3.11+, FastAPI, SQLAlchemy (async), Alembic |
-| **Frontend** | React 19, TypeScript, Vite, Tailwind CSS 4, Radix UI |
+| **Frontend** | React 18, TypeScript, Vite, Tailwind CSS 4, Radix UI |
 | **Database** | PostgreSQL 16 |
 | **AI/ML** | OpenAI Whisper, OpenAI-compatible LLM API |
 | **Media** | ffmpeg, yt-dlp |
@@ -75,16 +75,22 @@ Built with FastAPI + React + PostgreSQL, it features a clean dashboard, real-tim
 git clone https://github.com/rongtianjie/SubWeaver.git
 cd SubWeaver
 
-# Copy environment configuration (Docker Compose 读取根目录的 .env)
-cp backend/.env.example .env
+# Copy environment configuration for Docker Compose
+cp .env.example .env
 
-# Start all services
+# Start the default core services
 docker compose up -d
 
-# Open http://localhost in your browser
+# Open http://localhost:3000 in your browser
 ```
 
-The backend API is also available at `http://localhost:8765`. Full API documentation is at `http://localhost:8765/docs`.
+The frontend is available at `http://localhost:3000`. The backend API is available at `http://localhost:8000`, and the API documentation is at `http://localhost:8000/docs`.
+
+To also start the background worker and monitoring stack, use:
+
+```bash
+docker compose --profile full up -d
+```
 
 > **Note:** This project **only supports Docker Compose deployment**. Manual/native setup is no longer supported.
 
@@ -92,27 +98,28 @@ The backend API is also available at `http://localhost:8765`. Full API documenta
 
 | Service | Port | Description |
 |---------|------|-------------|
-| **Frontend (Nginx)** | `80` | Web UI |
-| **Backend (FastAPI)** | `8765` | REST API + SSE streams |
-| **Worker** | — | Background task processor (Whisper transcription, translation) |
+| **Frontend (Nginx)** | `3000` | Web UI |
+| **Backend (FastAPI)** | `8000` | REST API + SSE streams |
+| **Worker** | — | Background task processor (Whisper transcription, translation, `full` profile only) |
 | **Database (PostgreSQL)** | `5432` | Primary data store |
+| **Prometheus** | `9090` | Metrics dashboard (`full` / `monitoring` profile only) |
+| **Grafana** | `3001` | Monitoring UI (`full` / `monitoring` profile only) |
 
 ### Environment Variables
 
-Copy `backend/.env.example` to `backend/.env` and adjust the following key variables:
+Copy `.env.example` to `.env` and adjust the following key variables:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `SECRET_KEY` | `change-me-in-production` | JWT signing key (change in production!) |
 | `LLM_BASE_URL` | `http://host.docker.internal:8000/v1` | OpenAI-compatible LLM API endpoint for translation |
-| `LLM_API_KEY` | `1234` | LLM API key |
-| `LLM_MODEL` | (empty) | LLM model name |
-| `DB_PASSWORD` | `subweaver_secret` | PostgreSQL password |
-| `MAX_FILE_SIZE_MB` | `500` | Maximum upload file size (can be increased up to 2048) |
-| `RETENTION_DAYS` | `30` | File retention period |
-| `GUEST_TASK_LIMIT` | `3` | Maximum tasks per guest (no login) |
-| `SUPPORTED_LANGUAGES` | `["zh","ja","ko","fr","de","es","ru","pt","ar","th","vi"]` | Supported translation languages |
-| `CORS_ORIGINS` | `["http://localhost:5173","http://localhost:80","http://localhost"]` | Allowed CORS origins for frontend |
+| `LLM_API_KEY` | `your-api-key` | LLM API key |
+| `LLM_MODEL` | `gpt-3.5-turbo` | LLM model name |
+| `DB_PASSWORD` | `change-me-in-production` | PostgreSQL password |
+| `MAX_FILE_SIZE_MB` | via backend config | Maximum upload file size |
+| `RETENTION_DAYS` | via backend config | File retention period |
+| `WORKER_POLL_INTERVAL` | `5` | Worker polling interval in seconds |
+| `CORS_ORIGINS` | `http://localhost:3000,http://example.com` | Allowed CORS origins for the frontend |
 
 ---
 
@@ -255,7 +262,8 @@ uv run pytest --cov=app --cov-report=html
 ├── docker-compose.yml       # Production deployment
 ├── docker-compose.dev.yml   # Development database
 ├── run_worker.py            # Worker process entrypoint (used by Worker container)
-└── backend/.env.example     # Example environment variables copy
+├── .env.example             # Docker Compose environment template
+└── backend/.env.example     # Backend-only environment template
 ```
 
 ---
