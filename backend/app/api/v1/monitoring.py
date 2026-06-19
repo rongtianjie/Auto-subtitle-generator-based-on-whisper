@@ -13,7 +13,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 from typing import List, Optional
 
-from app.core.security import get_current_user
+from app.dependencies import get_current_user
 from app.models.user import User
 from app.core.metrics import (
     get_metrics_text,

@@ -4,7 +4,7 @@
  * 限制并发请求数、自动去重、防止滥用
  */
 
-import { AxiosRequestConfig } from 'axios';
+import type { AxiosRequestConfig } from 'axios';
 
 interface QueuedRequest {
   id: string;
@@ -28,25 +28,16 @@ class RequestQueue {
   }
 
   /**
-   * 检查是否已有相同请求在处理
-   */
-  private isDuplicate(config: AxiosRequestConfig): boolean {
-    const key = this.generateKey(config);
-    return (this.activeRequests.get(key) || 0) > 0;
-  }
-
-  /**
    * 添加请求到队列
    */
-  async enqueue<T>(config: AxiosRequestConfig): Promise<[boolean, string, number]> {
+  async enqueue(config: AxiosRequestConfig): Promise<[boolean, string, number]> {
     const key = this.generateKey(config);
-    const isDup = this.isDuplicate(config);
 
     return new Promise((resolve) => {
       const request: QueuedRequest = {
         id: `${Date.now()}-${Math.random()}`,
         config,
-        resolve: (value) => {
+        resolve: () => {
           this.dequeue(key);
           resolve([true, '', 0]);
         },

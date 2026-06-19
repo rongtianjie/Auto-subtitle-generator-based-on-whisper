@@ -1,0 +1,23 @@
+# 忽略 node_modules（Docker 内重新安装）
+frontend/node_modules
+backend/__pycache__
+backend/.pytest_cache
+backend/.mypy_cache
+
+# 忽略构建产物
+frontend/dist
+frontend/.vite
+
+# 忽略开发文件
+.git
+.gitignore
+*.md
+.env
+.env.local
+.vscode
+.idea
+
+# 忽略日志和临时文件
+*.log
+*.tmp
+.DS_Store

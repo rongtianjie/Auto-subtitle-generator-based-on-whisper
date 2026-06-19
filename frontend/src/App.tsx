@@ -36,29 +36,31 @@ function App() {
         <AuthProvider>
           <AppContextProvider>
             <HealthMonitor />
-            <Routes>
-              <Route element={<Layout />}>
-                <Route path="/" element={<Home />} />
-                <Route path="/tasks/:id" element={<TaskDetail />} />
-                <Route path="/admin/setup" element={<AdminSetup />} />
+            <Suspense fallback={<PageLoader />}>
+              <Routes>
+                <Route element={<Layout />}>
+                  <Route path="/" element={<Home />} />
+                  <Route path="/tasks/:id" element={<TaskDetail />} />
+                  <Route path="/admin/setup" element={<AdminSetup />} />
 
-                {/* Redirects for removed pages */}
-                <Route path="/login" element={<Navigate to="/" replace />} />
-                <Route path="/register" element={<Navigate to="/" replace />} />
-                <Route path="/dashboard" element={<Navigate to="/#recent" replace />} />
-              </Route>
+                  {/* Redirects for removed pages */}
+                  <Route path="/login" element={<Navigate to="/" replace />} />
+                  <Route path="/register" element={<Navigate to="/" replace />} />
+                  <Route path="/dashboard" element={<Navigate to="/#recent" replace />} />
+                </Route>
 
-              {/* Admin routes with sidebar layout */}
-              <Route path="/admin" element={<AdminLayout />}>
-                <Route index element={<Suspense fallback={<PageLoader />}><Overview /></Suspense>} />
-                <Route path="config" element={<Suspense fallback={<PageLoader />}><SystemConfig /></Suspense>} />
-                <Route path="models" element={<Suspense fallback={<PageLoader />}><ModelManagement /></Suspense>} />
-                <Route path="llm" element={<Suspense fallback={<PageLoader />}><LlmConfig /></Suspense>} />
-                <Route path="logs" element={<Suspense fallback={<PageLoader />}><LogViewer /></Suspense>} />
-                <Route path="users" element={<Suspense fallback={<PageLoader />}><UserManagement /></Suspense>} />
-                <Route path="files" element={<Suspense fallback={<PageLoader />}><FileManagement /></Suspense>} />
-              </Route>
-            </Routes>
+                {/* Admin routes with sidebar layout */}
+                <Route path="/admin" element={<AdminLayout />}>
+                  <Route index element={<Overview />} />
+                  <Route path="config" element={<SystemConfig />} />
+                  <Route path="models" element={<ModelManagement />} />
+                  <Route path="llm" element={<LlmConfig />} />
+                  <Route path="logs" element={<LogViewer />} />
+                  <Route path="users" element={<UserManagement />} />
+                  <Route path="files" element={<FileManagement />} />
+                </Route>
+              </Routes>
+            </Suspense>
           </AppContextProvider>
         </AuthProvider>
       </BackendHealthProvider>

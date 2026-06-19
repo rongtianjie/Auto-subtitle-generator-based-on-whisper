@@ -14,10 +14,10 @@ from typing import List, Optional
 import json
 import os
 
-from fastapi import APIRouter, Query, Depends, HTTPException
+from fastapi import APIRouter, Query, Path, Depends, HTTPException
 from pydantic import BaseModel
 
-from app.core.security import get_current_user
+from app.dependencies import get_current_user
 from app.models.user import User
 from app.config import settings
 
@@ -137,7 +137,7 @@ async def search_logs(
 
 @router.get("/request/{request_id}", response_model=List[LogEntry])
 async def get_request_logs(
-    request_id: str = Query(..., description="请求 ID"),
+    request_id: str = Path(..., description="请求 ID"),
     limit: int = Query(50, description="返回条数"),
     _: User = Depends(_check_admin),
 ):
@@ -157,7 +157,7 @@ async def get_request_logs(
 
 @router.get("/task/{task_id}", response_model=List[LogEntry])
 async def get_task_logs(
-    task_id: str = Query(..., description="任务 ID"),
+    task_id: str = Path(..., description="任务 ID"),
     limit: int = Query(50, description="返回条数"),
     _: User = Depends(_check_admin),
 ):

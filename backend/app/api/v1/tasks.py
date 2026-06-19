@@ -194,9 +194,18 @@ async def list_tasks(
     page_size: int = Query(20, ge=1, le=100),
     status: str = Query(None),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User | None = Depends(get_current_user),
 ):
-    """获取当前用户的任务列表（需登录）"""
+    """获取任务列表（未登录时返回空列表）"""
+    # 未登录用户返回空列表
+    if not current_user:
+        return TaskListResponse(
+            tasks=[],
+            total=0,
+            page=page,
+            page_size=page_size,
+        )
+
     tasks, total = await task_service.get_user_tasks(db, current_user.id, page, page_size, status)
     return TaskListResponse(
         tasks=[_task_to_response(t) for t in tasks],

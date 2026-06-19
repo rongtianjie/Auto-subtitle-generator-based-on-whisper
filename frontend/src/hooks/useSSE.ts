@@ -18,7 +18,7 @@ export function useSSE(taskId: string | null) {
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectAttemptsRef = useRef(0);
   const lastActivityRef = useRef<number>(Date.now());
-  const heartbeatCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const heartbeatCheckIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const connect = (url: string) => {
     try {

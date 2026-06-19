@@ -123,7 +123,7 @@ export default function Home() {
 
           {/* 右侧：任务列表 */}
           <div>
-            <TaskList tasks={recentTasks} isLoading={isLoadingTasks} onRefresh={loadRecentTasks} />
+            <TaskList tasks={recentTasks} isLoading={isLoadingTasks} />
           </div>
         </div>
       </div>

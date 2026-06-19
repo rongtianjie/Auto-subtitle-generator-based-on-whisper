@@ -1,4 +1,3 @@
-import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { TaskListCard } from '@/components/shared/TaskListCard';
 import type { Task } from '@/types';
@@ -6,10 +5,9 @@ import type { Task } from '@/types';
 interface TaskListProps {
   tasks: Task[];
   isLoading: boolean;
-  onRefresh?: () => void;
 }
 
-export function TaskList({ tasks, isLoading, onRefresh }: TaskListProps) {
+export function TaskList({ tasks, isLoading }: TaskListProps) {
   if (isLoading) {
     return (
       <Card>
