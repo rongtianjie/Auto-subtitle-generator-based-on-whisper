@@ -139,7 +139,7 @@ app.add_exception_handler(RequestValidationError, validation_exception_handler)
 app.add_exception_handler(Exception, general_exception_handler)
 
 # 注册路由
-from app.api.v1 import auth, tasks, health, admin, files, models, logs
+from app.api.v1 import auth, tasks, health, admin, files, models, logs, monitoring
 
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(tasks.router, prefix="/api/v1")
@@ -148,6 +148,7 @@ app.include_router(files.router, prefix="/api/v1")
 app.include_router(admin.router, prefix="/api/v1")
 app.include_router(models.router, prefix="/api/v1")
 app.include_router(logs.router, prefix="/api/v1")
+app.include_router(monitoring.router, prefix="/api/v1")
 app.include_router(admin.router, prefix="/api/v1")
 app.include_router(models.router, prefix="/api/v1")
 
