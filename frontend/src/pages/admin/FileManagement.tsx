@@ -115,7 +115,9 @@ export default function FileManagement() {
   }, []);
 
   useEffect(() => {
-    loadFiles(page, searchQuery, typeFilter, sortBy, sortOrder);
+    void (async () => {
+      await loadFiles(page, searchQuery, typeFilter, sortBy, sortOrder);
+    })();
   }, [page, searchQuery, typeFilter, sortBy, sortOrder, loadFiles]);
 
   const handleSearch = () => {

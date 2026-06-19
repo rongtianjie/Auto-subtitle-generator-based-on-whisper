@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import { useState, useEffect, createContext, useContext, useCallback } from 'react';
 
 type Theme = 'light' | 'dark' | 'system';
@@ -30,37 +31,26 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const stored = localStorage.getItem('theme') as Theme | null;
     return stored && ['light', 'dark', 'system'].includes(stored) ? stored : 'system';
   });
-
-  const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>(() => {
-    const stored = localStorage.getItem('theme') as Theme | null;
-    if (stored === 'light') return 'light';
-    if (stored === 'dark') return 'dark';
-    return getSystemTheme();
-  });
+  const [systemTheme, setSystemTheme] = useState<ResolvedTheme>(() => getSystemTheme());
 
   const setTheme = useCallback((newTheme: Theme) => {
     setThemeState(newTheme);
     localStorage.setItem('theme', newTheme);
-    const resolved = newTheme === 'system' ? getSystemTheme() : newTheme;
-    setResolvedTheme(resolved);
-    applyTheme(resolved);
   }, []);
+
+  const resolvedTheme: ResolvedTheme = theme === 'system' ? systemTheme : theme;
 
   // Apply theme on mount and when theme changes
   useEffect(() => {
-    const resolved = theme === 'system' ? getSystemTheme() : theme;
-    setResolvedTheme(resolved);
-    applyTheme(resolved);
-  }, [theme]);
+    applyTheme(resolvedTheme);
+  }, [resolvedTheme]);
 
   // Listen for system theme changes when in 'system' mode
   useEffect(() => {
     if (theme !== 'system') return;
     const mql = window.matchMedia('(prefers-color-scheme: dark)');
     const handler = (e: MediaQueryListEvent) => {
-      const resolved = e.matches ? 'dark' : 'light';
-      setResolvedTheme(resolved);
-      applyTheme(resolved);
+      setSystemTheme(e.matches ? 'dark' : 'light');
     };
     mql.addEventListener('change', handler);
     return () => mql.removeEventListener('change', handler);

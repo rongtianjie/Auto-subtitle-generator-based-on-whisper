@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Search, Filter, Download, RefreshCw, ChevronDown } from 'lucide-react';
 
 interface LogEntry {
@@ -27,7 +27,21 @@ export const LogViewer: React.FC<LogViewerProps> = ({ apiUrl, token }) => {
   const logEndRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
 
-  const fetchLogs = async () => {
+  const applyFilters = useCallback((logsToFilter: LogEntry[], query: string) => {
+    const filtered = logsToFilter.filter(log => {
+      const matchesQuery = query === '' ||
+        log.message.toLowerCase().includes(query.toLowerCase()) ||
+        log.logger.toLowerCase().includes(query.toLowerCase());
+
+      const matchesLevel = selectedLevel === '' || log.level === selectedLevel;
+
+      return matchesQuery && matchesLevel;
+    });
+
+    setFilteredLogs(filtered);
+  }, [selectedLevel]);
+
+  const fetchLogs = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
@@ -51,30 +65,16 @@ export const LogViewer: React.FC<LogViewerProps> = ({ apiUrl, token }) => {
     } finally {
       setLoading(false);
     }
-  };
-
-  const applyFilters = (logsToFilter: LogEntry[], query: string) => {
-    const filtered = logsToFilter.filter(log => {
-      const matchesQuery = query === '' ||
-        log.message.toLowerCase().includes(query.toLowerCase()) ||
-        log.logger.toLowerCase().includes(query.toLowerCase());
-
-      const matchesLevel = selectedLevel === '' || log.level === selectedLevel;
-
-      return matchesQuery && matchesLevel;
-    });
-
-    setFilteredLogs(filtered);
-  };
+  }, [apiUrl, token, selectedLevel, searchQuery, applyFilters]);
 
   useEffect(() => {
-    applyFilters(logs, searchQuery);
-  }, [searchQuery, selectedLevel, logs]);
+    queueMicrotask(() => applyFilters(logs, searchQuery));
+  }, [searchQuery, selectedLevel, logs, applyFilters]);
 
   useEffect(() => {
     const interval = setInterval(fetchLogs, 5000); // Auto-refresh every 5s
     return () => clearInterval(interval);
-  }, [selectedLevel]);
+  }, [fetchLogs]);
 
   useEffect(() => {
     if (autoScroll && logEndRef.current) {

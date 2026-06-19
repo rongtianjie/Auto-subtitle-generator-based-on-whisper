@@ -17,8 +17,13 @@ const WHISPER_MODELS = [
 
 interface Config {
   key: string;
-  value: any;
+  value: unknown;
   description: string | null;
+}
+
+interface ModelInfo {
+  name: string;
+  is_downloaded: boolean;
 }
 
 export default function SystemConfig() {
@@ -36,13 +41,13 @@ export default function SystemConfig() {
       setConfigs(configRes.data);
       setDownloadedModels(new Set(
         modelRes.data.models
-          .filter((m: any) => m.is_downloaded)
-          .map((m: any) => m.name)
+          .filter((m: ModelInfo) => m.is_downloaded)
+          .map((m: ModelInfo) => m.name)
       ));
     }).finally(() => setLoading(false));
   }, []);
 
-  const updateConfig = async (key: string, value: any) => {
+  const updateConfig = async (key: string, value: unknown) => {
     const config = configs[key];
     setSaving(key);
     try {
@@ -170,11 +175,11 @@ export default function SystemConfig() {
 function ConfigField({
   label, value, description, type = 'text', selectOptions, downloadedModels, saving, saved, onSave,
 }: {
-  label: string; value: any; description?: string; type?: string;
+  label: string; value: unknown; description?: string; type?: string;
   selectOptions?: { name: string; label: string; size_mb?: number; description?: string }[];
   downloadedModels?: Set<string>;
   saving?: boolean; saved?: boolean;
-  onSave: (value: any) => void;
+  onSave: (value: unknown) => void;
 }) {
   const [editValue, setEditValue] = useState(String(value));
   const [editing, setEditing] = useState(false);

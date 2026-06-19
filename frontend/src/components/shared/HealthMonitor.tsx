@@ -34,7 +34,7 @@ export function HealthMonitor() {
     // 当 user 从有值变为 null，且不是本组件主动触发的 logout，且不是用户主动登出
     if (prevUser && !user && !logoutTriggeredByUs.current) {
       if (!consumeIntentionalLogout()) {
-        setSessionExpiredOpen(true);
+        queueMicrotask(() => setSessionExpiredOpen(true));
       }
     }
 
@@ -42,12 +42,12 @@ export function HealthMonitor() {
     if (!user) {
       logoutTriggeredByUs.current = false;
     }
-  }, [user]);
+  }, [user, consumeIntentionalLogout]);
 
   // 后端离线时检测：后端恢复在线后重置 banner 关闭状态
   useEffect(() => {
     if (backendStatus === 'online' && !wasOnlineRef.current) {
-      setBannerDismissed(false);
+      queueMicrotask(() => setBannerDismissed(false));
     }
     wasOnlineRef.current = backendStatus === 'online';
   }, [backendStatus]);
@@ -63,7 +63,7 @@ export function HealthMonitor() {
       if (!token) {
         logoutTriggeredByUs.current = true;
         logout();
-        setSessionExpiredOpen(true);
+        queueMicrotask(() => setSessionExpiredOpen(true));
       }
     }
   }, [backendStatus, user, sessionExpiredOpen, logout]);

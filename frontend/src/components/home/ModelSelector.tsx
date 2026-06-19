@@ -12,6 +12,11 @@ interface Model {
   speed: number;
 }
 
+interface ModelStatusItem {
+  name: string;
+  is_downloaded: boolean;
+}
+
 const MODELS: Model[] = [
   { value: 'tiny', label: 'Tiny', desc: '最快, 准确度最低', speed: 5 },
   { value: 'base', label: 'Base', desc: '快速', speed: 4 },
@@ -34,7 +39,7 @@ export function ModelSelector({ selectedModel, onModelChange }: ModelSelectorPro
       .list()
       .then((res) => {
         const status: Record<string, boolean> = {};
-        res.data.models.forEach((m: any) => {
+        res.data.models.forEach((m: ModelStatusItem) => {
           status[m.name] = m.is_downloaded;
         });
         setModelStatus(status);

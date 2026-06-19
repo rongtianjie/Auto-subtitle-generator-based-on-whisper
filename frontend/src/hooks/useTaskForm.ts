@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { taskApi } from '@/lib/api';
 import type { Task } from '@/types';
 
@@ -8,7 +8,7 @@ export function useTaskForm() {
   const [url, setUrl] = useState('');
   const [title, setTitle] = useState('');
   const [model, setModel] = useState('base');
-  const [formats, setFormats] = useState<string[]>(['txt', 'srt', 'vtt']);
+  const [formats, setFormats] = useState<string[]>(['txt', 'srt', 'bilingual_srt']);
   const [langs, setLangs] = useState<string[]>(['zh']);
   const [translateEnabled, setTranslateEnabled] = useState(true);
   const [isDragging, setIsDragging] = useState(false);
@@ -43,11 +43,6 @@ export function useTaskForm() {
     return getValidationError() === undefined;
   }, [getValidationError]);
 
-  useEffect(() => {
-    if (!validationError) return;
-    setValidationError(getValidationError());
-  }, [validationError, getValidationError]);
-
   const submitTask = useCallback(async (): Promise<Task | null> => {
     const nextValidationError = getValidationError();
     setValidationError(nextValidationError);
@@ -80,13 +75,14 @@ export function useTaskForm() {
       setFile(null);
       setUrl('');
       setTitle('');
-      setFormats(['txt', 'srt', 'vtt']);
+      setFormats(['txt', 'srt', 'bilingual_srt']);
       setLangs(['zh']);
       setValidationError(undefined);
 
       return response.data;
-    } catch (error: any) {
-      const message = error.userMessage || error.response?.data?.message || '创建任务失败，请重试';
+    } catch (error: unknown) {
+      const apiError = error as { userMessage?: string; response?: { data?: { message?: string } } };
+      const message = apiError.userMessage || apiError.response?.data?.message || '创建任务失败，请重试';
       setValidationError(message);
       return null;
     } finally {

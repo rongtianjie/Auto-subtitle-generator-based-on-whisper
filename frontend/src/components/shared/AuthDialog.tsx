@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { extractApiError } from '@/lib/errors';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
@@ -27,15 +27,6 @@ export function AuthDialog({ open, onOpenChange, initialView = 'login', reason }
     }
     onOpenChange(isOpen);
   };
-
-  // 当对话框打开时，始终同步 view 到 initialView
-  // 覆盖 handleOpenChange 可能被 Radix Dialog 内部吞掉的情况
-  useEffect(() => {
-    if (open) {
-      setView(initialView);
-      setError('');
-    }
-  }, [open, initialView]);
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -81,19 +72,6 @@ export function AuthDialog({ open, onOpenChange, initialView = 'login', reason }
   );
 }
 
-// 简单的 base64 编码/解码（基本混淆，防止明文直接可见）
-function encodePassword(pwd: string): string {
-  return btoa(unescape(encodeURIComponent(pwd)));
-}
-
-function decodePassword(encoded: string): string {
-  try {
-    return decodeURIComponent(escape(atob(encoded)));
-  } catch {
-    return '';
-  }
-}
-
 function LoginForm({
   loading, setLoading, error, setError, onSuccess, onSwitchToRegister,
 }: {
@@ -103,11 +81,9 @@ function LoginForm({
 }) {
   const { login } = useAuth();
   const savedUsername = localStorage.getItem('saved_username') || '';
-  const savedPwdEncoded = localStorage.getItem('saved_pwd') || '';
   const [username, setUsername] = useState(savedUsername);
-  const [password, setPassword] = useState(savedPwdEncoded ? decodePassword(savedPwdEncoded) : '');
+  const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(!!savedUsername);
-  const [savePassword, setSavePassword] = useState(!!savedPwdEncoded);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -121,14 +97,9 @@ function LoginForm({
       } else {
         localStorage.removeItem('saved_username');
       }
-      // 保存密码（base64 编码）
-      if (savePassword) {
-        localStorage.setItem('saved_pwd', encodePassword(password));
-      } else {
-        localStorage.removeItem('saved_pwd');
-      }
+      localStorage.removeItem('saved_pwd');
       onSuccess();
-    } catch (err: any) {
+    } catch (err: unknown) {
       setError(extractApiError(err, '登录失败'));
     } finally {
       setLoading(false);
@@ -147,12 +118,8 @@ function LoginForm({
       </div>
       <div className="flex items-center justify-between text-sm">
         <label className="flex items-center gap-1.5 cursor-pointer">
-          <input type="checkbox" checked={rememberMe} onChange={(e) => { setRememberMe(e.target.checked); if (!e.target.checked) setSavePassword(false); }} className="rounded border-border text-primary focus:ring-primary/30" />
+          <input type="checkbox" checked={rememberMe} onChange={(e) => { setRememberMe(e.target.checked); }} className="rounded border-border text-primary focus:ring-primary/30" />
           <span className="text-muted-foreground">记住我</span>
-        </label>
-        <label className="flex items-center gap-1.5 cursor-pointer">
-          <input type="checkbox" checked={savePassword} onChange={(e) => { setSavePassword(e.target.checked); if (e.target.checked) setRememberMe(true); }} className="rounded border-border text-primary focus:ring-primary/30" />
-          <span className="text-muted-foreground">保存密码</span>
         </label>
       </div>
       {error && (
@@ -192,7 +159,7 @@ function RegisterForm({
     try {
       await register(username, email, password);
       onSuccess();
-    } catch (err: any) {
+    } catch (err: unknown) {
       setError(extractApiError(err, '注册失败'));
     } finally {
       setLoading(false);

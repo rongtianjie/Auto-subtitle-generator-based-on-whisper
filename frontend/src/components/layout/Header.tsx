@@ -18,14 +18,36 @@ export function Header() {
   const [authView, setAuthView] = useState<'login' | 'register'>('login');
 
   useEffect(() => {
-    if (user) {
-      setChecking(false);
-      return;
-    }
-    authApi.checkAdminExists()
-      .then((res) => setNoAdmin(!res.data.exists))
-      .catch(() => setNoAdmin(false))
-      .finally(() => setChecking(false));
+    let cancelled = false;
+
+    const checkAdminAvailability = async () => {
+      if (user) {
+        setNoAdmin(false);
+        setChecking(false);
+        return;
+      }
+
+      try {
+        const res = await authApi.checkAdminExists();
+        if (!cancelled) {
+          setNoAdmin(!res.data.exists);
+        }
+      } catch {
+        if (!cancelled) {
+          setNoAdmin(false);
+        }
+      } finally {
+        if (!cancelled) {
+          setChecking(false);
+        }
+      }
+    };
+
+    void checkAdminAvailability();
+
+    return () => {
+      cancelled = true;
+    };
   }, [user]);
 
   const openLogin = () => { setAuthView('login'); setAuthOpen(true); };

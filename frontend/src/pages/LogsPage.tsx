@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { AlertCircle, CheckCircle, Info, AlertTriangle } from 'lucide-react';
 import LogViewer from '../components/LogViewer';
 
@@ -19,13 +19,7 @@ const LogsPage: React.FC = () => {
   const token = localStorage.getItem('token') || '';
   const apiUrl = 'http://localhost:8000/api/v1';
 
-  useEffect(() => {
-    fetchStats();
-    const interval = setInterval(fetchStats, 30000); // Refresh stats every 30s
-    return () => clearInterval(interval);
-  }, []);
-
-  const fetchStats = async () => {
+  const fetchStats = useCallback(async () => {
     try {
       const response = await fetch(`${apiUrl}/logs/stats?hours=24`, {
         headers: { 'Authorization': `Bearer ${token}` }
@@ -37,7 +31,17 @@ const LogsPage: React.FC = () => {
     } catch (error) {
       console.error('Error fetching stats:', error);
     }
-  };
+  }, [apiUrl, token]);
+
+  useEffect(() => {
+    void (async () => {
+      await fetchStats();
+    })();
+    const interval = setInterval(() => {
+      void fetchStats();
+    }, 30000); // Refresh stats every 30s
+    return () => clearInterval(interval);
+  }, [fetchStats]);
 
   const getIconForLevel = (level: string) => {
     switch (level) {

@@ -46,16 +46,32 @@ export default function LogViewer() {
         setSelectedFile(res.data[0].filename);
       }
     }).finally(() => setLoading(false));
-  }, []);
+  }, [selectedFile]);
 
   useEffect(() => {
     if (!selectedFile) return;
-    setLoadingContent(true);
-    setStreamContent([]);
-    setStreaming(false);
-    adminApi.getLogContent(selectedFile, 200)
-      .then((res) => setLogContent(res.data))
-      .finally(() => setLoadingContent(false));
+
+    let cancelled = false;
+
+    void (async () => {
+      setLoadingContent(true);
+      setStreamContent([]);
+      setStreaming(false);
+      try {
+        const res = await adminApi.getLogContent(selectedFile, 200);
+        if (!cancelled) {
+          setLogContent(res.data);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingContent(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [selectedFile]);
 
   useEffect(() => {

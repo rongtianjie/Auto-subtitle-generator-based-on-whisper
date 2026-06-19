@@ -24,7 +24,10 @@ export default function TaskDetail() {
   const [outputs, setOutputs] = useState<TaskOutput[]>([]);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
   const { progress, done, connected } = useSSE(id || null);
+  const currentStatus = task?.status;
+  const startedAt = task?.started_at;
 
   useEffect(() => {
     if (!id) return;
@@ -34,52 +37,56 @@ export default function TaskDetail() {
 
   // 任务处理中时轮询刷新：SSE 连接正常时禁用轮询，SSE 断开时降级为 3 秒轮询
   useEffect(() => {
-    if (!id || !task) return;
-    if (task.status === 'completed' || task.status === 'failed' || task.status === 'cancelled') return;
+    if (!id || !currentStatus) return;
+    if (currentStatus === 'completed' || currentStatus === 'failed' || currentStatus === 'cancelled') return;
     if (connected) return; // SSE 正常时跳过轮询
 
     const interval = setInterval(async () => {
       try {
         const res = await taskApi.get(id);
-        setTask((prev) => {
-          if (!prev) return res.data;
-          const next = res.data;
-          // 保留 SSE 推送的消息字段，避免轮询返回 null 时冲掉实时进度
-          return {
-            ...prev,
-            status: next.status,
-            progress: next.progress,
-            progress_message: next.progress_message || prev.progress_message,
-            queue_position: next.queue_position,
-            estimated_seconds: next.estimated_seconds,
-            error_message: next.error_message,
-          };
+        queueMicrotask(() => {
+          setTask((prev) => {
+            if (!prev) return res.data;
+            const next = res.data;
+            // 保留 SSE 推送的消息字段，避免轮询返回 null 时冲掉实时进度
+            return {
+              ...prev,
+              status: next.status,
+              progress: next.progress,
+              progress_message: next.progress_message || prev.progress_message,
+              queue_position: next.queue_position,
+              estimated_seconds: next.estimated_seconds,
+              error_message: next.error_message,
+            };
+          });
         });
         if (res.data.status === 'completed') {
           taskApi.getOutputs(id).then((out) => setOutputs(out.data));
         }
-      } catch (err) {
+      } catch {
         // 静默失败，下次轮询重试
       }
     }, 3000);
 
     return () => clearInterval(interval);
-  }, [id, task?.status, connected]);
+  }, [id, currentStatus, connected]);
 
   useEffect(() => {
-    if (progress && task) {
-      setTask((prev) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          status: progress.status as Task['status'],
-          progress: progress.progress,
-          // SSE 消息为 null 时不覆盖，避免轮询保留的消息被冲掉
-          ...(progress.message ? { progress_message: progress.message } : {}),
-          ...(progress.error_message ? { error_message: progress.error_message } : {}),
-          queue_position: progress.queue_position,
-          estimated_seconds: progress.estimated_seconds,
-        };
+    if (progress) {
+      queueMicrotask(() => {
+        setTask((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            status: progress.status as Task['status'],
+            progress: progress.progress,
+            // SSE 消息为 null 时不覆盖，避免轮询保留的消息被冲掉
+            ...(progress.message ? { progress_message: progress.message } : {}),
+            ...(progress.error_message ? { error_message: progress.error_message } : {}),
+            queue_position: progress.queue_position,
+            estimated_seconds: progress.estimated_seconds,
+          };
+        });
       });
     }
   }, [progress]);
@@ -90,15 +97,28 @@ export default function TaskDetail() {
     }
   }, [done, id]);
 
+  useEffect(() => {
+    if (currentStatus !== 'processing' || !startedAt) {
+      return;
+    }
+
+    const interval = setInterval(() => {
+      setNow(Date.now());
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [currentStatus, startedAt]);
+
   const handleCancel = useCallback(async () => {
     if (!id) return;
     setIsCancelling(true);
     try {
       await taskApi.cancel(id);
       setTask(prev => prev ? { ...prev, cancel_requested: true, progress_message: '正在等待当前阶段结束...' } : prev);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('取消任务失败:', err);
-      const msg = err?.response?.data?.detail || err?.message || '未知错误';
+      const apiError = err as { response?: { data?: { detail?: unknown } }; message?: string };
+      const msg = apiError.response?.data?.detail || apiError.message || '未知错误';
       alert(`取消任务失败: ${msg}`);
     } finally {
       setIsCancelling(false);
@@ -176,7 +196,7 @@ export default function TaskDetail() {
               <Progress value={progressPercent} className="h-2.5" />
               {task.status === 'processing' && (
                 <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <span>{task.started_at ? `已运行 ${formatDuration((Date.now() - new Date(task.started_at).getTime()) / 1000)}` : '启动中...'}</span>
+                  <span>{startedAt ? `已运行 ${formatDuration((now - new Date(startedAt).getTime()) / 1000)}` : '启动中...'}</span>
                   <span>Whisper {task.whisper_model}</span>
                 </div>
               )}

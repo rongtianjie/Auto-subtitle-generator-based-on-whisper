@@ -6,6 +6,7 @@ import { ChevronDown, ChevronUp } from 'lucide-react';
 const OUTPUT_FORMATS = [
   { value: 'txt', label: '纯文本', ext: '.txt', desc: '完整转写文本' },
   { value: 'srt', label: '原始字幕', ext: '.srt', desc: '依据音频语言生成' },
+  { value: 'bilingual_srt', label: '双语字幕', ext: '.srt', desc: '原文与翻译并列展示' },
   { value: 'vtt', label: 'Web 字幕', ext: '.vtt', desc: '适用于网页播放器' },
 ];
 

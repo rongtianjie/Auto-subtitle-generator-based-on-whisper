@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { taskApi } from '@/lib/api';
 
 interface SSEProgress {
@@ -17,16 +17,21 @@ export function useSSE(taskId: string | null) {
   const [error, setError] = useState<string | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectAttemptsRef = useRef(0);
-  const lastActivityRef = useRef<number>(Date.now());
+  const lastActivityRef = useRef<number>(0);
+  const doneRef = useRef(false);
+  const connectedRef = useRef(false);
+  const connectRef = useRef<(url: string) => void>(() => {});
   const heartbeatCheckIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const connect = (url: string) => {
+  const connect = useCallback((url: string) => {
     try {
       const es = new EventSource(url);
       eventSourceRef.current = es;
       reconnectAttemptsRef.current = 0;
+      doneRef.current = false;
 
       es.onopen = () => {
+        connectedRef.current = true;
         setConnected(true);
         setError(null);
         lastActivityRef.current = Date.now();
@@ -46,7 +51,9 @@ export function useSSE(taskId: string | null) {
       es.addEventListener('completed', (event) => {
         const data = JSON.parse(event.data);
         setProgress(data);
+        doneRef.current = true;
         setDone(true);
+        connectedRef.current = false;
         setConnected(false);
         es.close();
       });
@@ -54,7 +61,9 @@ export function useSSE(taskId: string | null) {
       es.addEventListener('failed', (event) => {
         const data = JSON.parse(event.data);
         setProgress(data);
+        doneRef.current = true;
         setDone(true);
+        connectedRef.current = false;
         setConnected(false);
         es.close();
       });
@@ -62,12 +71,15 @@ export function useSSE(taskId: string | null) {
       es.addEventListener('cancelled', (event) => {
         const data = JSON.parse(event.data);
         setProgress(data);
+        doneRef.current = true;
         setDone(true);
+        connectedRef.current = false;
         setConnected(false);
         es.close();
       });
 
       es.addEventListener('error', () => {
+        connectedRef.current = false;
         setConnected(false);
         setError('连接已断开');
         es.close();
@@ -77,12 +89,13 @@ export function useSSE(taskId: string | null) {
           reconnectAttemptsRef.current += 1;
           const delay = Math.pow(2, reconnectAttemptsRef.current - 1) * 1000; // 指数退避: 1s, 2s, 4s
           setTimeout(() => {
-            if (!done) {
-              connect(url);
+            if (!doneRef.current) {
+              connectRef.current(url);
             }
           }, delay);
         } else {
           setError('连接已断开，请刷新页面重试');
+          doneRef.current = true;
           setDone(true);
         }
       });
@@ -95,33 +108,43 @@ export function useSSE(taskId: string | null) {
       heartbeatCheckIntervalRef.current = setInterval(() => {
         const now = Date.now();
         const idleTime = (now - lastActivityRef.current) / 1000;
-        if (idleTime > 15 && connected) {
+        if (idleTime > 15 && connectedRef.current) {
           setError('连接超时');
           es.close();
+          connectedRef.current = false;
           setConnected(false);
 
           // 尝试重连
           if (reconnectAttemptsRef.current < 3) {
             reconnectAttemptsRef.current += 1;
             setTimeout(() => {
-              if (!done) {
-                connect(url);
+              if (!doneRef.current) {
+                connectRef.current(url);
               }
             }, 1000 * Math.pow(2, reconnectAttemptsRef.current - 1));
           }
         }
       }, 5000); // 每 5 秒检查一次
-    } catch (err) {
+    } catch {
       setError('连接失败');
       setConnected(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    connectRef.current = connect;
+  }, [connect]);
 
   useEffect(() => {
     if (!taskId) return;
 
+    doneRef.current = false;
+    queueMicrotask(() => setDone(false));
+
     const url = taskApi.getStreamUrl(taskId);
-    connect(url);
+    queueMicrotask(() => {
+      connect(url);
+    });
 
     return () => {
       if (eventSourceRef.current) {
@@ -131,7 +154,7 @@ export function useSSE(taskId: string | null) {
         clearInterval(heartbeatCheckIntervalRef.current);
       }
     };
-  }, [taskId, done]);
+  }, [taskId, connect]);
 
   return { progress, done, connected, error };
 }

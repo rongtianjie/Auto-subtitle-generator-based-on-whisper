@@ -9,8 +9,8 @@ import type { AxiosRequestConfig } from 'axios';
 interface QueuedRequest {
   id: string;
   config: AxiosRequestConfig;
-  resolve: (value: any) => void;
-  reject: (reason?: any) => void;
+  resolve: (value: unknown) => void;
+  reject: (reason?: { message?: string }) => void;
 }
 
 class RequestQueue {

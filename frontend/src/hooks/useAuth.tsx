@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import { useState, useEffect, useRef, createContext, useContext } from 'react';
 import { authApi } from '@/lib/api';
 import type { UserInfo } from '@/types';
@@ -39,18 +40,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const intentionalLogoutRef = useRef(false);
 
   useEffect(() => {
-    const token = getToken('access_token');
-    if (token) {
-      authApi.getMe()
-        .then((res) => setUser(res.data))
-        .catch(() => {
+    let cancelled = false;
+
+    const bootstrap = async () => {
+      const token = getToken('access_token');
+      if (token) {
+        try {
+          const res = await authApi.getMe();
+          if (!cancelled) {
+            setUser(res.data);
+          }
+        } catch {
           removeToken('access_token');
           removeToken('refresh_token');
-        })
-        .finally(() => setLoading(false));
-    } else {
-      setLoading(false);
-    }
+        } finally {
+          if (!cancelled) {
+            setLoading(false);
+          }
+        }
+        return;
+      }
+
+      if (!cancelled) {
+        setLoading(false);
+      }
+    };
+
+    void bootstrap();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const login = async (username: string, password: string, rememberMe = true) => {

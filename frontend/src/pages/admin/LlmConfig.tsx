@@ -6,7 +6,16 @@ import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Loader2, Cpu, CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react';
 
-interface Config { key: string; value: any; description: string | null; }
+interface Config { key: string; value: unknown; description: string | null; }
+
+type LlmApiError = {
+  response?: {
+    data?: {
+      detail?: unknown;
+    };
+  };
+  message?: string;
+};
 
 export default function LlmConfig() {
   const [configs, setConfigs] = useState<Record<string, Config>>({});
@@ -31,7 +40,7 @@ export default function LlmConfig() {
     }).finally(() => setLoading(false));
   }, []);
 
-  const updateConfig = async (key: string, value: any) => {
+  const updateConfig = async (key: string, value: unknown) => {
     const config = configs[key];
     await adminApi.updateConfig(key, value, config?.description || undefined);
   };
@@ -42,8 +51,9 @@ export default function LlmConfig() {
     try {
       const res = await adminApi.testLlm(llmForm);
       setLlmTestResult(res.data);
-    } catch (err: any) {
-      setLlmTestResult(err.response?.data?.detail || { success: false, message: '请求失败' });
+    } catch (err: unknown) {
+      const apiError = err as LlmApiError;
+      setLlmTestResult((apiError.response?.data?.detail as { success: boolean; message: string; latency_ms?: number } | undefined) || { success: false, message: '请求失败' });
     } finally {
       setTestingLlm(false);
     }
@@ -68,8 +78,9 @@ export default function LlmConfig() {
     try {
       const res = await adminApi.fetchLlmModels({ base_url: llmForm.base_url, api_key: llmForm.api_key });
       setFetchedModels(res.data.models);
-    } catch (err: any) {
-      const msg = err.response?.data?.detail || err.message || '请求失败';
+    } catch (err: unknown) {
+      const apiError = err as LlmApiError;
+      const msg = apiError.response?.data?.detail || apiError.message || '请求失败';
       setFetchModelsError(typeof msg === 'string' ? msg : JSON.stringify(msg));
     } finally {
       setFetchingModels(false);

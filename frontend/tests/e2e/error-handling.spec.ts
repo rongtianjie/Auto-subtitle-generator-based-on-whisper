@@ -13,8 +13,7 @@ test.describe('错误处理和网络恢复', () => {
 
     // 尝试创建任务
     await page.locator('input[value="upload"]').check();
-    const fileInput = page.locator('input[type="file"]');
-    await fileInput.setInputFiles('./tests/fixtures/sample.mp3');
+    await page.locator('input[type="file"]').setInputFiles('./tests/fixtures/sample.mp3');
 
     await page.locator('input[placeholder*="标题"]').fill('超时测试');
 
@@ -71,9 +70,6 @@ test.describe('错误处理和网络恢复', () => {
     // 选择上传模式
     await page.locator('input[value="upload"]').check();
 
-    // 尝试上传不支持的文件类型（创建虚拟文件）
-    const fileInput = page.locator('input[type="file"]');
-
     // 虽然无法直接上传不支持的文件，但可以测试提交后的错误响应
     // 这取决于后端的验证
   });
@@ -81,8 +77,7 @@ test.describe('错误处理和网络恢复', () => {
   test('应该在网络恢复后重试请求', async ({ page }) => {
     // 创建任务
     await page.locator('input[value="upload"]').check();
-    const fileInput = page.locator('input[type="file"]');
-    await fileInput.setInputFiles('./tests/fixtures/sample.mp3');
+    await page.locator('input[type="file"]').setInputFiles('./tests/fixtures/sample.mp3');
 
     await page.locator('input[placeholder*="标题"]').fill('网络恢复测试');
 
@@ -109,7 +104,7 @@ test.describe('错误处理和网络恢复', () => {
     const submitButton = page.locator('button:has-text("开始转录")');
 
     // 初始状态应该禁用或显示错误
-    const isEnabled = await submitButton.isEnabled();
+    await submitButton.isEnabled();
     const isVisible = await submitButton.isVisible();
 
     // 如果可见，应该是禁用的（因为没有有效输入）
@@ -121,16 +116,11 @@ test.describe('错误处理和网络恢复', () => {
     await page.locator('input[value="upload"]').check();
 
     // 此时应该仍然禁用（因为没有选择文件）
-    const isEnabledAfter = await submitButton.isEnabled();
+    await submitButton.isEnabled();
     // 实际验证取决于实现
   });
 
   test('应该显示 API 错误细节', async ({ page }) => {
-    // 监听 API 响应
-    const responsePromise = page.waitForResponse(
-      response => response.url().includes('/api/') && response.status() >= 400
-    );
-
     // 尝试创建任务（可能会失败）
     await page.locator('input[value="url"]').check();
     const urlInput = page.locator('input[placeholder*="URL"]');
@@ -153,8 +143,7 @@ test.describe('错误处理和网络恢复', () => {
     // 快速创建多个任务
     for (let i = 0; i < 3; i++) {
       await page.locator('input[value="upload"]').check();
-      const fileInput = page.locator('input[type="file"]');
-      await fileInput.setInputFiles('./tests/fixtures/sample.mp3');
+      await page.locator('input[type="file"]').setInputFiles('./tests/fixtures/sample.mp3');
 
       const titleInput = page.locator('input[placeholder*="标题"]');
       await titleInput.fill(`并发测试 ${i + 1}`);

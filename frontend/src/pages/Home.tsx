@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useCallback } from 'react';
 import { taskApi } from '@/lib/api';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { TaskSourceSelector } from '@/components/home/TaskSourceSelector';
@@ -38,20 +38,7 @@ export default function Home() {
   const { recentTasks, setRecentTasks, isLoadingTasks, setIsLoadingTasks, showNotification } =
     useAppContext();
 
-  // 加载最近任务
-  useEffect(() => {
-    loadRecentTasks();
-  }, []);
-
-  // 自动刷新：当有正在执行的任务时，每 3 秒刷新列表
-  useEffect(() => {
-    const hasRunning = recentTasks.some((t) => t.status === 'processing' || t.status === 'queued');
-    if (!hasRunning) return;
-    const interval = setInterval(loadRecentTasks, 3000);
-    return () => clearInterval(interval);
-  }, [recentTasks]);
-
-  const loadRecentTasks = async () => {
+  const loadRecentTasks = useCallback(async () => {
     setIsLoadingTasks(true);
     try {
       const res = await taskApi.list({ page: 1, page_size: 5 });
@@ -61,14 +48,29 @@ export default function Home() {
     } finally {
       setIsLoadingTasks(false);
     }
-  };
+  }, [setIsLoadingTasks, setRecentTasks]);
+
+  // 加载最近任务
+  useEffect(() => {
+    void loadRecentTasks();
+  }, [loadRecentTasks]);
+
+  // 自动刷新：当有正在执行的任务时，每 3 秒刷新列表
+  useEffect(() => {
+    const hasRunning = recentTasks.some((t) => t.status === 'processing' || t.status === 'queued');
+    if (!hasRunning) return;
+    const interval = setInterval(() => {
+      void loadRecentTasks();
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [recentTasks, loadRecentTasks]);
 
   const handleSubmit = async () => {
     const task = await submitTask();
     if (task) {
       showNotification('success', '任务创建成功！');
       // 重新加载列表
-      loadRecentTasks();
+      void loadRecentTasks();
     } else if (validationError) {
       showNotification('error', validationError);
     }

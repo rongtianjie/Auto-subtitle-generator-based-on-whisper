@@ -51,7 +51,7 @@ export default function AdminSetup() {
     try {
       await registerAdmin(username, email, password);
       navigate('/admin', { replace: true });
-    } catch (err: any) {
+    } catch (err: unknown) {
       setError(extractApiError(err, '创建管理员账号失败'));
     } finally {
       setLoading(false);

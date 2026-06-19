@@ -8,12 +8,27 @@ interface LogStreamProps {
   taskId?: string;
 }
 
+interface LogEntryPayload {
+  timestamp?: string;
+  message?: string;
+  progress_message?: string;
+}
+
+function formatLogEntry(data: LogEntryPayload): string {
+  const timestamp = data.timestamp ? new Date(data.timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
+  return `[${timestamp}] ${data.message || data.progress_message || 'Progress update'}`;
+}
+
 const LogStream: React.FC<LogStreamProps> = ({ apiUrl, token, requestId, taskId }) => {
   const [logs, setLogs] = useState<string[]>([]);
   const [paused, setPaused] = useState(false);
   const [connected, setConnected] = useState(false);
   const logsEndRef = useRef<HTMLDivElement>(null);
-  const eventSourceRef = useRef<EventSource | null>(null);
+  const pausedRef = useRef(paused);
+
+  useEffect(() => {
+    pausedRef.current = paused;
+  }, [paused]);
 
   useEffect(() => {
     // 构建 EventSource URL
@@ -34,7 +49,7 @@ const LogStream: React.FC<LogStreamProps> = ({ apiUrl, token, requestId, taskId 
     });
 
     eventSource.addEventListener('progress', (event) => {
-      if (!paused) {
+      if (!pausedRef.current) {
         try {
           const data = JSON.parse(event.data);
           setLogs(prev => [...prev, formatLogEntry(data)]);
@@ -61,8 +76,6 @@ const LogStream: React.FC<LogStreamProps> = ({ apiUrl, token, requestId, taskId 
       eventSource.close();
     });
 
-    eventSourceRef.current = eventSource;
-
     return () => {
       eventSource.close();
     };
@@ -73,11 +86,6 @@ const LogStream: React.FC<LogStreamProps> = ({ apiUrl, token, requestId, taskId 
       logsEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [logs, paused]);
-
-  const formatLogEntry = (data: any): string => {
-    const timestamp = new Date(data.timestamp).toLocaleTimeString();
-    return `[${timestamp}] ${data.message || data.progress_message || 'Progress update'}`;
-  };
 
   const clearLogs = () => {
     setLogs([]);

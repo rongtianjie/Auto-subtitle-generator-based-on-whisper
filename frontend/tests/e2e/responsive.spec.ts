@@ -13,7 +13,7 @@ test.describe('响应式布局和设备兼容性', () => {
 
     // 验证导航（通常是汉堡菜单）
     const menu = page.locator('[data-mobile-menu]');
-    const isMenuVisible = await menu.isVisible();
+    await menu.isVisible();
 
     // 验证表单元素堆叠
     const formInputs = page.locator('input, button');

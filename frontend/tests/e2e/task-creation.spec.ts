@@ -1,5 +1,4 @@
 import { test, expect } from '@playwright/test';
-import { uploadFile, getTaskOutputs, waitForTaskCompletion } from './helpers';
 
 test.describe('任务创建流程', () => {
   test.beforeEach(async ({ page }) => {
@@ -113,9 +112,6 @@ test.describe('任务创建流程', () => {
   test('拖放上传文件', async ({ page }) => {
     // 选择上传模式
     await page.locator('input[value="upload"]').check();
-
-    // 获取拖放区域
-    const dropZone = page.locator('[data-dropzone]');
 
     // 模拟拖放
     const testAudioPath = './tests/fixtures/sample.mp3';

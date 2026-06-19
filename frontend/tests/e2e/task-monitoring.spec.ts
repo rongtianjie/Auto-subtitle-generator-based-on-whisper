@@ -17,7 +17,6 @@ test.describe('任务监控流程', () => {
 
     // 获取任务 ID
     const taskItem = page.locator('[data-task-id]').first();
-    const taskId = await taskItem.getAttribute('data-task-id');
 
     // 等待进度更新
     const progressBar = taskItem.locator('progress, [role="progressbar"]');
@@ -42,7 +41,6 @@ test.describe('任务监控流程', () => {
 
     // 获取任务 ID
     const taskItem = page.locator('[data-task-id]').first();
-    const taskId = await taskItem.getAttribute('data-task-id');
 
     // 点击取消按钮
     const cancelButton = taskItem.locator('button:has-text("取消")');
@@ -85,7 +83,7 @@ test.describe('任务监控流程', () => {
       // 验证至少包含一个输出格式
       const formats = outputs.map(o => o.format);
       expect(formats).toContain(expect.stringMatching(/txt|srt|vtt/));
-    } catch (error) {
+    } catch {
       // 如果没有实际的 Worker 运行，跳过
       test.skip();
     }
@@ -102,7 +100,6 @@ test.describe('任务监控流程', () => {
 
     // 等待任务失败
     const taskItem = page.locator('[data-task-id]').first();
-    const taskId = await taskItem.getAttribute('data-task-id');
 
     // 设置超时检查失败状态
     await page.waitForTimeout(5000);

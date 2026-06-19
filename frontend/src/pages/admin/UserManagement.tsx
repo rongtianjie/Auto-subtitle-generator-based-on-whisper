@@ -60,7 +60,9 @@ export default function UserManagement() {
   }, []);
 
   useEffect(() => {
-    loadUsers(page, searchQuery);
+    void (async () => {
+      await loadUsers(page, searchQuery);
+    })();
   }, [page, searchQuery, loadUsers]);
 
   const handleSearch = () => {

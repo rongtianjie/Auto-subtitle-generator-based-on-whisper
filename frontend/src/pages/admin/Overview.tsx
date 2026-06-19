@@ -77,65 +77,65 @@ export default function Overview() {
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  useEffect(() => {
-    adminApi.getStats().then((res) => setStats(res.data)).finally(() => setLoading(false));
-  }, []);
-
-  const loadActiveTasks = useCallback(async () => {
-    try {
-      const res = await adminApi.listTasks({ status: 'processing', page_size: 10 });
-      setActiveTasks(res.data.tasks);
-    } catch { /* ignore */ }
-  }, []);
-
   const loadedRef = useRef(false);
 
-  const loadAllTasks = useCallback(async (page: number) => {
-    // 仅在首次加载时显示 loading（避免自动刷新时的页面闪动）
+  const refreshOverview = useCallback(async (page: number) => {
     if (!loadedRef.current) {
+      setLoading(true);
       setLoadingAll(true);
     }
+
     try {
-      const res = await adminApi.listTasks({ page, page_size: PAGE_SIZE });
-      setAllTasks(res.data);
+      const [statsRes, activeRes, allRes] = await Promise.all([
+        adminApi.getStats(),
+        adminApi.listTasks({ status: 'processing', page_size: 10 }),
+        adminApi.listTasks({ page, page_size: PAGE_SIZE }),
+      ]);
+      setStats(statsRes.data);
+      setActiveTasks(activeRes.data.tasks);
+      setAllTasks(allRes.data);
       loadedRef.current = true;
     } catch { /* ignore */ }
+    setLoading(false);
     setLoadingAll(false);
   }, []);
 
   // 首次加载及定时刷新
   useEffect(() => {
-    loadActiveTasks();
-    loadAllTasks(1);
+    let cancelled = false;
+
+    void (async () => {
+      await refreshOverview(allPage);
+      if (cancelled) return;
+    })();
+
     const interval = setInterval(() => {
-      loadActiveTasks();
-      if (allPage === 1) loadAllTasks(1);
-      adminApi.getStats().then((res) => setStats(res.data)).catch(() => {});
+      void refreshOverview(allPage);
     }, 5000);
-    return () => clearInterval(interval);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [allPage, refreshOverview]);
 
   // 翻页时重新加载
   const handlePageChange = (page: number) => {
     setAllPage(page);
-    loadAllTasks(page);
+    void refreshOverview(page);
   };
 
   const handleDeleteTask = useCallback(async (taskId: string) => {
     try {
       await adminApi.deleteTask(taskId);
       // 刷新列表
-      loadAllTasks(allPage);
-      loadActiveTasks();
-      // 刷新统计
-      adminApi.getStats().then((res) => setStats(res.data));
+      void refreshOverview(allPage);
     } catch (err) {
       console.error('删除任务失败:', err);
       alert('删除任务失败，请稍后重试');
     } finally {
       setDeletingId(null);
     }
-  }, [allPage, loadAllTasks, loadActiveTasks]);
+  }, [allPage, refreshOverview]);
 
   const handleCancelTask = useCallback(async (taskId: string) => {
     try {
