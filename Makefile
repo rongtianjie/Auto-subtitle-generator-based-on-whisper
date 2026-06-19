@@ -115,28 +115,6 @@ db-revision:
 	@read -p "Enter migration name: " name; \
 	cd backend && python -m alembic revision --autogenerate -m "$$name"
 
-# Kubernetes
-k8s-apply:
-	kubectl apply -f k8s/namespaces/
-	kubectl apply -f k8s/storage/
-	kubectl apply -f k8s/config/
-	kubectl apply -f k8s/database/
-	kubectl apply -f k8s/backend/
-	kubectl apply -f k8s/frontend/
-	kubectl apply -f k8s/worker/
-	kubectl apply -f k8s/monitoring/
-	kubectl apply -f k8s/ingress/
-
-k8s-delete:
-	kubectl delete namespace subweaver
-
-k8s-status:
-	kubectl get pods -n subweaver
-	kubectl get services -n subweaver
-
-k8s-logs-backend:
-	kubectl logs -f deployment/backend -n subweaver
-
 # 清理
 clean:
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true

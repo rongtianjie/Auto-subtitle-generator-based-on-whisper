@@ -26,7 +26,7 @@ Make the repository root easier to scan by moving long-form documentation into `
 - `frontend/`
 - `docs/`
 - `docker/`
-- existing infra/application directories that are already grouped (`k8s/`, `monitoring/`, `archive/`, etc.)
+- existing infra/application directories that are already grouped (`monitoring/`, `archive/`, etc.)
 
 ### Documentation moves
 
